@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# App runtime / local data
+app.log
+prints/
+prints_test/
+data/app.db
+data/autosave.json
+data/settings.json
+data/print/
+data/tabletka_*.html
+data/tabletka_*.json
+data/tabletka_enrich_cache.json
+data/tabletka_enrich_report.json
+data/tabletka_enrich_empty_report.json
+data/_*.txt
+
+# Large source materials (local only)
+Протоколы/
+*.pdf
+
+# Packaging
+dist/
+build/
+*.spec
+*.exe
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,258 @@
+/* Бланк формы 1 — 4 на A4 с полями и метками разреза */
+
+:root {
+  --ink: #111;
+  --grid: #222;
+  --paper: #fff;
+  --page-margin: 5mm;
+  --gutter: 3mm;
+  --cut: #666;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #d7d7d7;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+}
+
+.a4-sheet {
+  position: relative;
+  width: 210mm;
+  height: 297mm;
+  margin: 10px auto;
+  padding: var(--page-margin);
+  background: #fff;
+  page-break-after: always;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,.15);
+}
+
+.a4-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: var(--gutter);
+  width: 100%;
+  height: 100%;
+}
+
+/* Дуплекс по длинной стороне: зеркало L/R */
+.duplex-back { direction: rtl; }
+.duplex-back > .blank { direction: ltr; }
+
+.blank {
+  width: 100%;
+  height: 100%;
+  padding: 1.8mm;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.blank-empty {
+  padding: 0;
+  background: transparent;
+}
+
+/* Короткие метки разреза по центру краёв и крестик в центре */
+.cut-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.cut-marks .tick {
+  position: absolute;
+  background: var(--cut);
+}
+
+.cut-marks .tick-v {
+  width: 0.25mm;
+  height: 4mm;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.cut-marks .tick-h {
+  height: 0.25mm;
+  width: 4mm;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.cut-marks .tick-top { top: 0.6mm; }
+.cut-marks .tick-bottom { bottom: 0.6mm; }
+.cut-marks .tick-left { left: 0.6mm; }
+.cut-marks .tick-right { right: 0.6mm; }
+
+.cut-marks .cross-h,
+.cut-marks .cross-v {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: var(--cut);
+}
+
+.cut-marks .cross-h {
+  width: 5mm;
+  height: 0.25mm;
+  transform: translate(-50%, -50%);
+}
+
+.cut-marks .cross-v {
+  width: 0.25mm;
+  height: 5mm;
+  transform: translate(-50%, -50%);
+}
+
+table.form {
+  width: 100%;
+  height: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 9px;
+  line-height: 1.12;
+  box-sizing: border-box;
+  /* внешняя рамка — нижняя линия не обрезается overflow */
+  border: 1px solid var(--grid);
+}
+
+table.form td,
+table.form th {
+  border: 1px solid var(--grid);
+  vertical-align: top;
+  padding: 1mm 1.2mm;
+  word-wrap: break-word;
+}
+
+table.form tr:last-child td {
+  border-bottom: 1px solid var(--grid);
+}
+
+.center { text-align: center; }
+.middle { vertical-align: middle !important; }
+
+.title {
+  font-size: 12px;
+  letter-spacing: .2px;
+  font-weight: 400;
+}
+
+.head-label {
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.block-tight p,
+.rx p,
+.date-box p,
+.person p {
+  margin: 0 0 0.8mm;
+}
+
+.block-tight p:last-child,
+.rx p:last-child,
+.date-box p:last-child,
+.person p:last-child { margin-bottom: 0; }
+
+.org, .law-head, .back-head { font-size: 7.5px; line-height: 1.12; }
+.person { font-size: 9px; }
+
+.rx-label {
+  width: 16.55%;
+  font-size: 11px;
+  vertical-align: middle;
+  text-align: left;
+}
+
+.rx {
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.rx .drug { font-size: 11px; }
+.rx .sig-small { font-size: 9px; }
+
+.sign-block {
+  padding-top: 5mm !important;
+  line-height: 1.2;
+  font-size: 8px;
+}
+
+.validity {
+  text-align: center;
+  font-size: 9px;
+  line-height: 1.15;
+  padding-top: 1.5mm !important;
+  padding-bottom: 1.5mm !important;
+}
+
+.front col.c1 { width: 16.55%; }
+.front col.c2 { width: 32.90%; }
+.front col.c3 { width: 50.55%; }
+
+.front .h-r0 { height: 25mm; }
+.front .h-r1 { height: 13.5mm; }
+.front .h-r2 { height: 15.5mm; }
+.front .h-r3 { height: 21mm; }
+.front .h-r4 { height: 23mm; }
+.front .h-r5 { height: 23mm; }
+
+.front .validity {
+  height: 9mm;
+}
+
+.back { font-size: 8px; }
+.back col.b1 { width: 30.04%; }
+.back col.b2 { width: 18.42%; }
+.back col.b3 { width: 14.48%; }
+.back col.b4 { width: 11.30%; }
+.back col.b5 { width: 25.76%; }
+
+.back th {
+  font-weight: 400;
+  text-align: center;
+  vertical-align: middle !important;
+}
+
+.back .row-1 th { height: 14mm; }
+.back .row-2 td {
+  height: 9mm;
+  border-top: 0;
+  vertical-align: middle !important;
+  text-align: center;
+}
+.back .row-3 td {
+  height: 13mm;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+.back .row-4 td {
+  height: 14mm;
+  text-align: center;
+  vertical-align: middle !important;
+}
+.back .row-5 td {
+  height: 10mm;
+  text-align: center;
+  vertical-align: middle !important;
+}
+.back .row-6 td { height: 36mm; }
+
+.strike { text-decoration: line-through; }
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  body { background: #fff; }
+  .a4-sheet {
+    margin: 0;
+    box-shadow: none;
+  }
+}

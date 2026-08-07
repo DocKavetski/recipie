@@ -1,0 +1,280 @@
+"""Проверка и установка обновлений с GitHub."""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import shutil
+import subprocess
+import tempfile
+import zipfile
+from pathlib import Path
+from typing import Any
+from urllib.request import Request, urlopen
+
+from backend.version import (
+    APP_VERSION,
+    GITHUB_BRANCH,
+    GITHUB_OWNER,
+    GITHUB_REPO,
+    GITHUB_URL,
+)
+
+LOGGER = logging.getLogger(__name__)
+
+ROOT = Path(__file__).resolve().parents[1]
+PROTECTED_DATA = {
+    "app.db",
+    "autosave.json",
+    "settings.json",
+}
+CODE_DIRS = ("backend", "web", "tests", "scripts")
+CODE_FILES = (
+    "main.py",
+    "requirements.txt",
+    "pytest.ini",
+    "VERSION",
+    "README.md",
+    ".gitignore",
+)
+
+
+def _http_json(url: str, timeout: int = 20) -> Any:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "RecipiesUpdater/1.0",
+            "Accept": "application/vnd.github+json",
+        },
+    )
+    with urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _http_bytes(url: str, timeout: int = 60) -> bytes:
+    request = Request(url, headers={"User-Agent": "RecipiesUpdater/1.0"})
+    with urlopen(request, timeout=timeout) as response:
+        return response.read()
+
+
+def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd or ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+
+def is_git_checkout() -> bool:
+    return (ROOT / ".git").exists()
+
+
+def read_local_version() -> str:
+    version_file = ROOT / "VERSION"
+    if version_file.exists():
+        text = version_file.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    return APP_VERSION
+
+
+def local_commit_sha() -> str | None:
+    if not is_git_checkout():
+        return None
+    result = _run_git("rev-parse", "HEAD")
+    if result.returncode != 0:
+        return None
+    return (result.stdout or "").strip() or None
+
+
+def remote_head_commit() -> dict[str, Any]:
+    url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/commits/{GITHUB_BRANCH}"
+    payload = _http_json(url)
+    sha = str(payload.get("sha") or "")
+    commit = payload.get("commit") or {}
+    message = str((commit.get("message") or "").splitlines()[0] if commit else "")
+    date = str(((commit.get("author") or {}).get("date")) if commit else "")
+    return {"sha": sha, "message": message, "date": date}
+
+
+def remote_version_file() -> str | None:
+    url = (
+        f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/"
+        f"{GITHUB_BRANCH}/VERSION"
+    )
+    try:
+        raw = _http_bytes(url, timeout=15).decode("utf-8").strip()
+        return raw or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def get_update_status() -> dict[str, Any]:
+    local_version = read_local_version()
+    local_sha = local_commit_sha()
+    status: dict[str, Any] = {
+        "ok": True,
+        "app_version": local_version,
+        "local_commit": local_sha,
+        "remote_version": None,
+        "remote_commit": None,
+        "remote_message": "",
+        "remote_date": "",
+        "update_available": False,
+        "repo_url": GITHUB_URL,
+        "branch": GITHUB_BRANCH,
+        "mode": "git" if is_git_checkout() else "zip",
+        "message": "Актуальная версия.",
+    }
+
+    try:
+        remote = remote_head_commit()
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning("update check failed: %s", exc)
+        status["ok"] = False
+        status["message"] = f"Не удалось проверить обновления: {exc}"
+        return status
+
+    remote_sha = remote.get("sha") or ""
+    remote_version = remote_version_file() or ""
+    status["remote_commit"] = remote_sha
+    status["remote_version"] = remote_version or None
+    status["remote_message"] = remote.get("message") or ""
+    status["remote_date"] = remote.get("date") or ""
+
+    if local_sha and remote_sha:
+        status["update_available"] = local_sha[:12] != remote_sha[:12]
+    elif remote_version:
+        status["update_available"] = remote_version != local_version
+    else:
+        status["update_available"] = False
+
+    if status["update_available"]:
+        shown = remote_version or (remote_sha[:7] if remote_sha else "новая")
+        status["message"] = f"Доступно обновление: {shown}"
+    else:
+        status["message"] = f"Установлена актуальная версия {local_version}"
+
+    return status
+
+
+def _copy_tree(src: Path, dst: Path) -> None:
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+
+
+def _apply_zip_update() -> dict[str, Any]:
+    zip_url = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/archive/refs/heads/{GITHUB_BRANCH}.zip"
+    raw = _http_bytes(zip_url, timeout=120)
+    with tempfile.TemporaryDirectory(prefix="recipies-update-") as tmp:
+        tmp_path = Path(tmp)
+        archive = tmp_path / "update.zip"
+        archive.write_bytes(raw)
+        with zipfile.ZipFile(archive, "r") as zf:
+            zf.extractall(tmp_path)
+        extracted_dirs = [p for p in tmp_path.iterdir() if p.is_dir()]
+        if not extracted_dirs:
+            raise RuntimeError("Архив обновления пуст.")
+        source_root = extracted_dirs[0]
+
+        for name in CODE_DIRS:
+            src = source_root / name
+            if src.exists():
+                _copy_tree(src, ROOT / name)
+
+        for name in CODE_FILES:
+            src = source_root / name
+            if src.exists():
+                shutil.copy2(src, ROOT / name)
+
+        seed_src = source_root / "data" / "seed_drugs_from_protocols.json"
+        if seed_src.exists():
+            (ROOT / "data").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(seed_src, ROOT / "data" / "seed_drugs_from_protocols.json")
+
+        # прочие полезные data-файлы без перезаписи локальных
+        data_src = source_root / "data"
+        if data_src.exists():
+            for path in data_src.iterdir():
+                if not path.is_file():
+                    continue
+                if path.name in PROTECTED_DATA:
+                    continue
+                if path.name.startswith("tabletka_"):
+                    continue
+                target = ROOT / "data" / path.name
+                if path.name.endswith(".json") or path.name.endswith(".txt"):
+                    shutil.copy2(path, target)
+
+    return {"method": "zip"}
+
+
+def _apply_git_update() -> dict[str, Any]:
+    fetch = _run_git("fetch", "origin", GITHUB_BRANCH)
+    if fetch.returncode != 0:
+        raise RuntimeError((fetch.stderr or fetch.stdout or "git fetch failed").strip())
+
+    pull = _run_git("pull", "--ff-only", "origin", GITHUB_BRANCH)
+    if pull.returncode != 0:
+        # fallback: reset hard to origin (локальные data/* в .gitignore и не затронуты)
+        reset = _run_git("reset", "--hard", f"origin/{GITHUB_BRANCH}")
+        if reset.returncode != 0:
+            raise RuntimeError((pull.stderr or pull.stdout or "git pull failed").strip())
+        return {"method": "git-reset"}
+    return {"method": "git-pull"}
+
+
+def apply_update() -> dict[str, Any]:
+    before = get_update_status()
+    if not before.get("update_available"):
+        return {
+            "ok": True,
+            "updated": False,
+            "needs_restart": False,
+            "message": before.get("message") or "Обновление не требуется.",
+            "status": before,
+        }
+
+    try:
+        details = _apply_git_update() if is_git_checkout() else _apply_zip_update()
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.exception("apply_update failed")
+        return {
+            "ok": False,
+            "updated": False,
+            "needs_restart": False,
+            "message": f"Ошибка обновления: {exc}",
+            "status": before,
+        }
+
+    # после обновления кода — перечитать VERSION
+    after_version = read_local_version()
+    return {
+        "ok": True,
+        "updated": True,
+        "needs_restart": True,
+        "message": (
+            f"Обновлено до {after_version}. Перезапустите приложение, "
+            "чтобы изменения вступили в силу."
+        ),
+        "details": details,
+        "app_version": after_version,
+        "status": get_update_status() if is_git_checkout() else {
+            "app_version": after_version,
+            "update_available": False,
+        },
+    }
+
+
+def open_repo_in_browser() -> dict[str, Any]:
+    try:
+        os.startfile(GITHUB_URL)  # type: ignore[attr-defined]
+        return {"ok": True, "url": GITHUB_URL}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "url": GITHUB_URL, "message": str(exc)}

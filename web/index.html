@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Рецепты Беларусь</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container-fluid app-shell py-3">
+        <header class="topbar mb-2">
+            <div>
+                <h1 class="app-title">Рецепты · Форма 1</h1>
+                <div class="app-subtitle">Карта → пациент → поиск препарата → печать · <span id="topbarVersion" class="text-muted">v—</span></div>
+            </div>
+        </header>
+
+        <ul class="nav nav-tabs app-tabs mb-3" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-recipe" type="button">Рецепт</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-directory" type="button">Справочник</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-availability" type="button">Наличие</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-settings" type="button">Настройки</button></li>
+        </ul>
+
+        <div class="tab-content">
+            <section class="tab-pane fade show active" id="tab-recipe">
+                <div class="workspace-grid">
+                <div class="panel-box">
+                    <div class="panel-title">Пациент</div>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-3 col-xl-2">
+                            <label class="form-label" for="cardNumberInput">Номер карты</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="cardNumberInput" type="text" placeholder="12543/26">
+                                <button class="btn btn-outline-secondary" id="loadHistoryBtn" type="button" title="Загрузить последнюю выписку">История</button>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-9 col-xl-10">
+                            <label class="form-label" for="patientSmartInput">ФИО, дата и номер карты</label>
+                            <input
+                                class="form-control form-control-sm patient-smart-input"
+                                id="patientSmartInput"
+                                type="text"
+                                placeholder="Махсма В.В. 14.03.1998 112567"
+                                autocomplete="off"
+                            >
+                            <div class="patient-parsed is-empty mt-1" id="patientParsedHint">
+                                Вставьте ФИО, дату и номер карты — всё разложится само
+                            </div>
+                            <input id="patientNameInput" type="hidden" value="">
+                            <input id="birthDate" type="hidden" value="">
+                            <input id="ageValue" type="hidden" value="">
+                            <input id="recipeDoctorInput" type="hidden" value="">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-box">
+                    <div class="panel-title">Препараты</div>
+
+                    <div class="drug-search-bar mb-3">
+                        <label class="form-label mb-1" for="globalDrugSearch">Поиск и добавление</label>
+                        <div class="drug-search-wrap">
+                            <input
+                                class="form-control form-control-sm drug-search-input"
+                                id="globalDrugSearch"
+                                type="text"
+                                placeholder="Начните вводить МНН, русское или торговое название"
+                                autocomplete="off"
+                            >
+                            <div class="drug-search-dropdown" id="drugSearchDropdown" hidden></div>
+                        </div>
+                        <div class="text-muted small mt-1">
+                            <span class="hint-kbd">Enter</span> добавить ·
+                            <span class="hint-kbd">↑</span><span class="hint-kbd">↓</span> выбрать ·
+                            <span class="hint-kbd">Esc</span> закрыть
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle recipe-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="min-width: 110px;">Режим</th>
+                                    <th style="min-width: 150px;">Торговое название</th>
+                                    <th style="min-width: 120px;">МНН</th>
+                                    <th style="min-width: 150px;">Русское название</th>
+                                    <th style="min-width: 140px;">Лат. название</th>
+                                    <th style="min-width: 90px;">Форма</th>
+                                    <th style="min-width: 90px;">Дозировка</th>
+                                    <th style="min-width: 90px;">Фасовка</th>
+                                    <th style="min-width: 110px;">D.t.d. №</th>
+                                    <th style="min-width: 180px;">Схема</th>
+                                    <th style="min-width: 90px;">Наличие</th>
+                                    <th style="min-width: 60px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="drugRows"></tbody>
+                        </table>
+                    </div>
+                    <div class="drugs-empty is-visible" id="drugsEmptyState">В выписке пока пусто — найдите препарат и нажмите Enter</div>
+                </div>
+
+                <div class="panel-box">
+                    <div class="panel-title">Действия</div>
+                    <div class="actions-bar">
+                        <button class="btn btn-sm btn-primary" id="printBtn"><i class="fa-solid fa-print me-1"></i>Печать</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="saveHistoryBtn">В историю</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="showSchemeBtn">Схема</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="clearFormBtn">Очистить</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="restoreAutosaveBtn">Автосохранение</button>
+                        <span class="vr d-none d-md-inline mx-1"></span>
+                        <button class="btn btn-sm btn-outline-secondary" id="saveTemplateBtn">Сохранить шаблон</button>
+                        <select class="form-select form-select-sm template-select" id="templateSelect">
+                            <option value="">Шаблон</option>
+                        </select>
+                        <button class="btn btn-sm btn-outline-secondary" id="loadTemplateBtn">Загрузить</button>
+                    </div>
+                </div>
+                </div>
+            </section>
+
+            <section class="tab-pane fade" id="tab-directory">
+                <div class="panel-box">
+                    <div class="panel-head">
+                        <div>
+                            <div class="panel-title mb-0">Справочник препаратов</div>
+                            <div class="stub-note">Просмотр каталога. Редактирование — в следующей версии.</div>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Категория</th>
+                                    <th>МНН</th>
+                                    <th>Русское название</th>
+                                    <th>Лат. название</th>
+                                    <th>Форма</th>
+                                    <th>Дозировка</th>
+                                    <th>Фасовка</th>
+                                    <th>Торговые названия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="directoryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section class="tab-pane fade" id="tab-availability">
+                <div class="panel-box">
+                    <div class="panel-head">
+                        <div>
+                            <div class="panel-title mb-0">Наличие в Минске</div>
+                            <div class="stub-note">Данные с tabletka.by (best-effort). Обновление может занять время.</div>
+                        </div>
+                        <button class="btn btn-sm btn-primary" id="refreshAvailabilityBtn" type="button">Обновить наличие</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Препарат</th>
+                                    <th>Статус</th>
+                                    <th>Аптек в Минске</th>
+                                    <th>Комментарий</th>
+                                </tr>
+                            </thead>
+                            <tbody id="availabilityTableBody">
+                                <tr><td colspan="4" class="text-muted">Нажмите «Обновить наличие»</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section class="tab-pane fade" id="tab-settings">
+                <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                        <div class="panel-box h-100">
+                            <div class="panel-title">Основные настройки</div>
+                            <div class="row g-2 mt-1">
+                                <div class="col-12">
+                                    <label class="form-label">ФИО врача</label>
+                                    <div class="input-group input-group-sm">
+                                        <input class="form-control form-control-sm" id="settingsDoctorInput" type="text" placeholder="Кавецкий Алексей Сергеевич">
+                                        <button class="btn btn-outline-secondary" id="changeDoctorBtn" type="button">Сменить врача</button>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Город</label>
+                                    <select class="form-select form-select-sm">
+                                        <option>Минск</option>
+                                        <option>Все города</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Печать</label>
+                                    <select class="form-select form-select-sm">
+                                        <option>Просмотр PDF</option>
+                                        <option>Быстрая печать</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <div class="panel-box h-100">
+                            <div class="panel-title">Обновление приложения</div>
+                            <div class="update-meta mt-2">
+                                <div>Текущая версия: <strong id="appVersionLabel">—</strong></div>
+                                <div class="text-muted small" id="appUpdateStatus">Проверка обновлений не выполнялась</div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2 mt-3">
+                                <button class="btn btn-sm btn-outline-primary" id="checkUpdateBtn" type="button">
+                                    <i class="fa-solid fa-rotate me-1"></i>Проверить обновления
+                                </button>
+                                <button class="btn btn-sm btn-primary" id="applyUpdateBtn" type="button" disabled>
+                                    <i class="fa-solid fa-download me-1"></i>Обновить приложение
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="openRepoBtn" type="button">
+                                    GitHub
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <div class="panel-box h-100">
+                            <div class="panel-title">Поведение</div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" checked>
+                                <label class="form-check-label">Автоматически проверять наличие при запуске</label>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox">
+                                <label class="form-check-label">Быстрая печать без диалога</label>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" checked>
+                                <label class="form-check-label">Сохранять номер карты при очистке</label>
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger mt-3">Сбросить базу данных</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="statusbar mt-3">
+            <span class="status-indicator"></span>
+            <span id="statusText">Готово.</span>
+        </div>
+    </div>
+
+    <template id="drugRowTemplate">
+        <tr class="drug-row">
+            <td>
+                <select class="form-select form-select-sm drug-mode-select">
+                    <option value="mnn">МНН</option>
+                    <option value="trade">Торговое</option>
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm drug-trade-select" disabled>
+                    <option>Выберите</option>
+                </select>
+            </td>
+            <td><input class="form-control form-control-sm drug-mnn-input" type="text"></td>
+            <td><input class="form-control form-control-sm drug-russian-input" type="text"></td>
+            <td><input class="form-control form-control-sm drug-latin-input" type="text"></td>
+            <td>
+                <select class="form-select form-select-sm drug-form-select"></select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm drug-dosage-select"></select>
+            </td>
+            <td><input class="form-control form-control-sm drug-packaging-input" type="text"></td>
+            <td><input class="form-control form-control-sm drug-dispense-input" type="number" min="1"></td>
+            <td>
+                <select class="form-select form-select-sm drug-scheme-select">
+                    <option value="">Выбрать</option>
+                </select>
+            </td>
+            <td><span class="status-badge status-good drug-availability-badge">Есть</span></td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-link text-danger px-1 remove-row-btn" type="button">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </td>
+        </tr>
+    </template>
+
+    <div class="modal fade" id="doctorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6">Первый запуск</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">ФИО врача</label>
+                    <input class="form-control form-control-sm" id="doctorModalInput" type="text" placeholder="Введите ФИО врача">
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Позже</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="saveDoctorBtn">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/eel.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

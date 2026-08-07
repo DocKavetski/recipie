@@ -1,0 +1,7 @@
+eel
+reportlab
+requests
+beautifulsoup4
+pyinstaller
+pytest
+pypdf
