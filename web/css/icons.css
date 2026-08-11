@@ -1,0 +1,30 @@
+.fa-solid {
+  display: inline-block;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.fa-solid::before {
+  display: inline-block;
+}
+
+.fa-print::before {
+  content: "\1F5A8";
+}
+
+.fa-pills::before {
+  content: "\1F48A";
+}
+
+.fa-rotate::before {
+  content: "\21BB";
+}
+
+.fa-download::before {
+  content: "\2B07";
+}
+
+.fa-xmark::before {
+  content: "\2715";
+}

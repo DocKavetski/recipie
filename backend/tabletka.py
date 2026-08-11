@@ -64,13 +64,10 @@ def _offer_url(result_id: str) -> str:
     return urljoin(BASE_URL, f"/result/?ls={result_id}&region={MINSK_REGION_ID}")
 
 
-def search_tabletka(query: str, limit: int = 8) -> list[TabletkaOffer]:
-    """Поиск препаратов на tabletka.by."""
+def _search_tabletka_once(session: requests.Session, query: str, limit: int = 8) -> list[TabletkaOffer]:
     q = str(query or "").strip()
     if len(q) < 2:
         return []
-
-    session = _session()
     try:
         response = session.get(f"{BASE_URL}/search", params={"request": q}, timeout=25)
         response.raise_for_status()
@@ -119,6 +116,24 @@ def search_tabletka(query: str, limit: int = 8) -> list[TabletkaOffer]:
             break
 
     return offers
+
+
+def search_tabletka(query: str, aliases: Iterable[str] | None = None, limit: int = 8) -> list[TabletkaOffer]:
+    """Поиск препаратов на tabletka.by с fallback по торговым названиям."""
+    session = _session()
+    merged: list[TabletkaOffer] = []
+    seen_ids: set[str] = set()
+
+    for candidate in _unique_queries(query, aliases):
+        for offer in _search_tabletka_once(session, candidate, limit=limit):
+            key = offer.result_id or f"{offer.name}|{offer.form}|{offer.url}"
+            if key in seen_ids:
+                continue
+            seen_ids.add(key)
+            merged.append(offer)
+            if len(merged) >= limit:
+                return merged
+    return merged
 
 
 def _count_pharmacy_rows(html: str) -> int:
@@ -175,8 +190,8 @@ def check_availability_minsk(
     queries = _unique_queries(query, aliases)
     offers: list[TabletkaOffer] = []
     used_query = query
-    for candidate in queries:
-        offers = search_tabletka(candidate)
+    for idx, candidate in enumerate(queries):
+        offers = search_tabletka(candidate, aliases=queries[idx + 1 :])
         if offers:
             used_query = candidate
             break

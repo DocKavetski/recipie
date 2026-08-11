@@ -19,6 +19,7 @@ import eel
 from backend.db import DrugRepository
 from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
 from backend.pdf_gen import generate_prescription_pdf
+from backend.print_preview import build_preview_context
 from backend.settings import SettingsStore
 from backend.tabletka import availability_to_dict, check_availability_minsk, search_tabletka
 from backend.updater import apply_update, cleanup_update_artifacts, get_update_status, open_repo_in_browser
@@ -233,6 +234,7 @@ def print_prescription(payload):
         "pdf_path": str(pdf_path),
         "warnings": result.warnings,
         "payload": normalized,
+        "preview": build_preview_context(normalized, DEFAULT_STAMP, DEFAULT_UNP),
     }
 
 

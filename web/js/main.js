@@ -146,92 +146,30 @@ function extractDefaultDispenseQty(packaging) {
     return match ? Number(match[0]) : 1;
 }
 
-function numberToWordsRu(value) {
-    const number = Number.parseInt(value, 10);
-    if (Number.isNaN(number)) {
-        return String(value || "");
-    }
-
-    const units = [
-        "ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять",
-        "десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать",
-        "шестнадцать", "семнадцать", "восемнадцать", "девятнадцать",
-    ];
-    const tens = ["", "", "двадцать", "тридцать", "сорок", "пятьдесят", "шестьдесят", "семьдесят", "восемьдесят", "девяносто"];
-    const hundreds = ["", "сто", "двести", "триста", "четыреста", "пятьсот", "шестьсот", "семьсот", "восемьсот", "девятьсот"];
-
-    if (number < 20) {
-        return units[number];
-    }
-    if (number < 100) {
-        const ten = Math.floor(number / 10);
-        const unit = number % 10;
-        return [tens[ten], unit ? units[unit] : ""].filter(Boolean).join(" ");
-    }
-    if (number < 1000) {
-        const hundred = Math.floor(number / 100);
-        const remainder = number % 100;
-        return [hundreds[hundred], remainder ? numberToWordsRu(remainder) : ""].filter(Boolean).join(" ");
-    }
-
-    return String(number);
-}
-
-function openPrintPreview(state, pdfPath = "") {
-    const now = new Date();
-    const months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
-    const todayLong = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} г.`;
-
-    const STAMP_HTML = `
-        <p>ООО «Центр здорового сна»</p>
-        <p>220012, г. Минск, пр-т Независимости,</p>
-        <p>72А, пом. 1Н. Тел. 017 299-99-92,</p>
-        <p>029 311-88-44, 033 311-01-44.</p>
-        <p>УНП 191896187</p>
-        <p>р/с BY94 PJCB 30120288531000000933</p>
-        <p>БИК PJCBBY2X в ОАО</p>
-        <p>«Приор банк», код 749</p>
-    `;
-
-    const filledDrugs = state.drugs.filter((drug) => drug.mnn);
-    const blanks = [];
-    for (let i = 0; i < filledDrugs.length; i += 2) {
-        blanks.push(filledDrugs.slice(i, i + 2));
-    }
-
-    function latinGenitive(name) {
-        const value = String(name || "").trim();
-        if (!value) return "";
-        if (value.endsWith("um")) return `${value.slice(0, -2)}i`;
-        if (value.endsWith("a")) return `${value.slice(0, -1)}ae`;
-        if (value.endsWith("is")) return value;
-        if (value.endsWith("us")) return `${value.slice(0, -2)}i`;
-        return value;
-    }
-
-    function formInPhrase(drugForm) {
-        const raw = String(drugForm || "").trim().toLowerCase().replace(/\.$/, "");
-        if (raw === "tab" || raw === "") return "in tab.";
-        if (raw === "caps") return "in caps.";
-        if (raw === "sol") return "in sol.";
-        if (raw === "sir") return "in sir.";
-        return `in ${raw}.`;
-    }
+function openPrintPreview(state, pdfPath = "", preview = null) {
+    const previewData = preview || {};
+    const stampLines = Array.isArray(previewData.stamp_lines) ? previewData.stamp_lines : [];
+    const stampHtml = stampLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+    const todayLong = String(previewData.today_long || "");
+    const patientName = String(previewData.patient_name || formatNameWithInitials(state.patient_name));
+    const birthDate = String(previewData.birth_date || normalizeBirthDate(state.birth_date));
+    const doctorName = String(previewData.doctor_name || state.doctor_name || "");
+    const frontBatches = Array.isArray(previewData.front_batches) ? previewData.front_batches : [];
+    const backFilledBatches = Array.isArray(previewData.back_filled_batches) ? previewData.back_filled_batches : [];
+    const duplexBackSlot = Array.isArray(previewData.duplex_back_slot) && previewData.duplex_back_slot.length === 4
+        ? previewData.duplex_back_slot
+        : DUPLEX_BACK_SLOT;
+    const unp = escapeHtml(previewData.unp || "191896187");
 
     function renderDrugCell(drug) {
         if (!drug) {
             return "";
         }
-        const title = drug.mode === "trade" ? drug.selectedTrade : latinGenitive(drug.latin_name);
-        const nameLine = [title, drug.dosage].filter(Boolean).join(" ").trim();
-        const qty = drug.dispenseQty;
-        const dtd = `D.t.d. № ${qty} (${numberToWordsRu(qty)}) ${formInPhrase(drug.drug_form)}`;
-        const scheme = String(drug.selectedScheme || "").trim();
-        const sig = scheme ? `S. ${scheme}` : "S.";
+        const lines = Array.isArray(drug.rp_lines) ? drug.rp_lines : [];
         return `
-            <p class="drug">${escapeHtml(nameLine)}</p>
-            <p>${escapeHtml(dtd)}</p>
-            <p class="sig-small">${escapeHtml(sig)}</p>
+            <p class="drug">${escapeHtml(lines[0] || "")}</p>
+            <p>${escapeHtml(lines[1] || "")}</p>
+            <p class="sig-small">${escapeHtml(lines[2] || "S.")}</p>
         `;
     }
 
@@ -250,13 +188,13 @@ function openPrintPreview(state, pdfPath = "") {
                   <col class="c3" />
                 </colgroup>
                 <tr class="h-r0">
-                  <td colspan="2" class="org block-tight">${STAMP_HTML}</td>
+                  <td colspan="2" class="org block-tight">${stampHtml}</td>
                   <td class="law-head block-tight">
                     <p>Медицинская документация Форма 1</p>
                     <p>Утверждена</p>
                     <p>Министерством здравоохранения</p>
                     <p>Республики Беларусь</p>
-                    <p>УНП организации здравоохранения 191896187</p>
+                    <p>УНП организации здравоохранения ${unp}</p>
                   </td>
                 </tr>
                 <tr class="h-r1">
@@ -270,9 +208,9 @@ function openPrintPreview(state, pdfPath = "") {
                 </tr>
                 <tr class="h-r2">
                   <td colspan="3" class="person block-tight">
-                    <p>Фамилия, инициалы пациента&nbsp;&nbsp;${escapeHtml(formatNameWithInitials(state.patient_name))}</p>
-                    <p>Дата рождения&nbsp;&nbsp;${escapeHtml(normalizeBirthDate(state.birth_date))}</p>
-                    <p>Фамилия, инициалы врача&nbsp;&nbsp;${escapeHtml(state.doctor_name)}</p>
+                    <p>Фамилия, инициалы пациента&nbsp;&nbsp;${escapeHtml(patientName)}</p>
+                    <p>Дата рождения&nbsp;&nbsp;${escapeHtml(birthDate)}</p>
+                    <p>Фамилия, инициалы врача&nbsp;&nbsp;${escapeHtml(doctorName)}</p>
                     <p>(иного медицинского работника)</p>
                   </td>
                 </tr>
@@ -357,15 +295,16 @@ function openPrintPreview(state, pdfPath = "") {
     function renderBackSheet(batch) {
         return [0, 1, 2, 3]
             .map((frontIdx) => {
-                const slot = DUPLEX_BACK_SLOT[frontIdx];
+                const slot = duplexBackSlot[frontIdx];
                 return `<div class="blank-slot blank-slot-${slot}">${renderBack(Boolean(batch[frontIdx]))}</div>`;
             })
             .join("");
     }
 
     const sheets = [];
-    for (let i = 0; i < blanks.length; i += 4) {
-        const batch = [0, 1, 2, 3].map((offset) => blanks[i + offset] || null);
+    for (let i = 0; i < frontBatches.length; i += 1) {
+        const batch = Array.isArray(frontBatches[i]) ? frontBatches[i] : [null, null, null, null];
+        const backBatch = Array.isArray(backFilledBatches[i]) ? backFilledBatches[i] : [false, false, false, false];
         const cutMarks = `
               <div class="cut-marks" aria-hidden="true">
                 <span class="tick tick-v tick-top"></span>
@@ -383,7 +322,7 @@ function openPrintPreview(state, pdfPath = "") {
             </section>
             <section class="a4-sheet">
               ${cutMarks}
-              <div class="a4-grid">${renderBackSheet(batch)}</div>
+              <div class="a4-grid">${renderBackSheet(backBatch)}</div>
             </section>
         `);
     }
@@ -1601,7 +1540,7 @@ async function bindFormActions() {
             }
 
             const printState = result.payload || state;
-            openPrintPreview(printState, result.pdf_path);
+            openPrintPreview(printState, result.pdf_path, result.preview);
             if (printState.card_number) {
                 await window.eel.save_history_entry(printState)();
             }
