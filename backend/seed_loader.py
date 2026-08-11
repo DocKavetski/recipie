@@ -9,10 +9,15 @@ from typing import Any
 
 BENZO_MARKERS = (
     "диазепам", "diazepam", "феназепам", "phenazepam", "клоназепам", "clonazepam",
-    "алпразолам", "alprazolam", "лоразепам", "lorazepam", "тофизопам", "tofisopam",
-    "грандаксин", "grandaxin", "бромазепам", "bromazepam", "нитразепам", "nitrazepam",
+    "алпразолам", "alprazolam", "лоразепам", "lorazepam",
+    "бромазепам", "bromazepam", "нитразепам", "nitrazepam",
     "мидазолам", "midazolam", "оксазепам", "oxazepam", "медазепам", "medazepam",
     "хлордиазепоксид", "бензодиазепин",
+)
+
+# Тофизопам (Грандаксин) — «дневной» анксиолитик, оставляем в каталоге по запросу.
+BENZO_ALLOWLIST = (
+    "тофизопам", "tofisopam", "грандаксин", "grandaxin", "грандопам",
 )
 
 CATEGORY_MAP = {
@@ -53,6 +58,8 @@ def _is_benzo(item: dict[str, Any]) -> bool:
             str(item.get("category", "")),
         ]
     ).lower()
+    if any(marker in blob for marker in BENZO_ALLOWLIST):
+        return False
     return any(marker in blob for marker in BENZO_MARKERS) or blob.endswith("zepam") or "зепам" in blob
 
 

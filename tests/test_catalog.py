@@ -31,8 +31,20 @@ def test_list_drugs_not_empty(tmp_path: Path):
     assert len(drugs) >= 40
     names = " ".join(d["russian_name"].lower() for d in drugs)
     assert "диазепам" not in names
-    assert "тофизопам" not in names
     assert "эсциталопрам" in names
+    assert "тофизопам" in names
+
+
+def test_catalog_includes_grandaxin(tmp_path: Path):
+    repo = DrugRepository(tmp_path / "app.db")
+    repo.initialize()
+    results = repo.search_drugs("грандаксин")
+    assert results
+    assert any(item["mnn"] == "Tofisopam" for item in results)
+    drug = next(item for item in repo.list_drugs() if item["mnn"] == "Tofisopam")
+    assert "Грандаксин" in drug["trade_names"]
+    assert drug["dosage"] == "50 мг"
+    assert "Tab." in drug["form_options"]
 
 
 def test_catalog_excludes_solution_form():

@@ -4301,6 +4301,124 @@
     }
   },
   {
+    "category": "anxiolytic",
+    "mnn": "Tofisopam",
+    "russian_name": "Тофизопам",
+    "latin_name": "Tofisopamum",
+    "drug_form": "Tab.",
+    "dosage": "50 мг",
+    "packaging": "N60",
+    "trade_names": [
+      "Грандаксин",
+      "Грандопам",
+      "Тофизопам"
+    ],
+    "search_aliases": [
+      "тофизопам",
+      "tofisopam",
+      "грандаксин",
+      "grandaxin",
+      "грандопам"
+    ],
+    "scheme_options": [],
+    "sources": [
+      "curated_list",
+      "manual_request"
+    ],
+    "form_options": [
+      "Tab.",
+      "Caps."
+    ],
+    "dosage_options": [
+      "50 мг"
+    ],
+    "form_dosage_map": {
+      "Tab.": [
+        "50 мг"
+      ],
+      "Caps.": [
+        "50 мг"
+      ]
+    },
+    "trade_details": {
+      "Грандаксин": {
+        "packaging": "N60",
+        "dispense_qty": 60,
+        "form": "Tab.",
+        "dosage": "50 мг"
+      },
+      "Грандопам": {
+        "packaging": "N60",
+        "dispense_qty": 60,
+        "form": "Caps.",
+        "dosage": "50 мг"
+      },
+      "Тофизопам": {
+        "packaging": "N60",
+        "dispense_qty": 60,
+        "form": "Tab.",
+        "dosage": "50 мг"
+      }
+    },
+    "tabletka": {
+      "mnn_id": "1483",
+      "mnn_text": "Тофизопам",
+      "variants_count": 5,
+      "variants": [
+        {
+          "trade_name": "Грандаксин",
+          "form_raw": "таблетки 50мг N20",
+          "drug_form": "Tab.",
+          "dosage": "50 мг",
+          "packaging": "N20",
+          "dispense_qty": 20,
+          "ls": "2996",
+          "producer": "Эгис"
+        },
+        {
+          "trade_name": "Грандаксин",
+          "form_raw": "таблетки 50мг N60",
+          "drug_form": "Tab.",
+          "dosage": "50 мг",
+          "packaging": "N60",
+          "dispense_qty": 60,
+          "ls": "2997",
+          "producer": "Эгис"
+        },
+        {
+          "trade_name": "Грандаксин",
+          "form_raw": "таблетки 50мг N90",
+          "drug_form": "Tab.",
+          "dosage": "50 мг",
+          "packaging": "N90",
+          "dispense_qty": 90,
+          "ls": "31014",
+          "producer": "Эгис"
+        },
+        {
+          "trade_name": "Грандопам",
+          "form_raw": "капсулы 50мг N60",
+          "drug_form": "Caps.",
+          "dosage": "50 мг",
+          "packaging": "N60",
+          "dispense_qty": 60,
+          "ls": "30443",
+          "producer": "Минскинтеркапс"
+        },
+        {
+          "trade_name": "Тофизопам",
+          "form_raw": "таблетки 50мг N60",
+          "drug_form": "Tab.",
+          "dosage": "50 мг",
+          "packaging": "N60",
+          "dispense_qty": 60,
+          "ls": "31175",
+          "producer": "Борисовский ЗМП"
+        }
+      ]
+    }
+  },
+  {
     "category": "hypnotic",
     "mnn": "Zopiclone",
     "russian_name": "Зопиклон",
