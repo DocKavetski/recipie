@@ -75,7 +75,8 @@
                         <div class="text-muted small mt-1">
                             <span class="hint-kbd">Enter</span> добавить ·
                             <span class="hint-kbd">↑</span><span class="hint-kbd">↓</span> выбрать ·
-                            <span class="hint-kbd">Esc</span> закрыть
+                            <span class="hint-kbd">Esc</span> закрыть ·
+                            после добавления проверяется наличие в Минске (tabletka.by)
                         </div>
                     </div>
 
@@ -92,8 +93,8 @@
                                     <th style="min-width: 90px;">Дозировка</th>
                                     <th style="min-width: 90px;">Фасовка</th>
                                     <th style="min-width: 110px;">D.t.d. №</th>
-                                    <th style="min-width: 180px;">Схема</th>
-                                    <th style="min-width: 90px;">Наличие</th>
+                                    <th style="min-width: 220px;" title="Можно выбрать из списка или ввести вручную">Схема</th>
+                                    <th style="min-width: 90px;" title="Наличие в аптеках Минска (tabletka.by)">Наличие</th>
                                     <th style="min-width: 60px;"></th>
                                 </tr>
                             </thead>
@@ -155,9 +156,20 @@
                     <div class="panel-head">
                         <div>
                             <div class="panel-title mb-0">Наличие в Минске</div>
-                            <div class="stub-note">Данные с tabletka.by (best-effort). Обновление может занять время.</div>
+                            <div class="stub-note">
+                                Данные с tabletka.by по аптекам Минска. На вкладке «Рецепт» колонка «Наличие»
+                                обновляется сама при добавлении препарата. Здесь — массовая проверка справочника.
+                            </div>
                         </div>
-                        <button class="btn btn-sm btn-primary" id="refreshAvailabilityBtn" type="button">Обновить наличие</button>
+                        <button class="btn btn-sm btn-primary" id="refreshAvailabilityBtn" type="button">
+                            <i class="fa-solid fa-pills me-1"></i>Проверить справочник
+                        </button>
+                    </div>
+                    <div class="availability-howto text-muted small mb-3">
+                        <ol class="mb-0 ps-3">
+                            <li>Откройте вкладку <strong>Рецепт</strong>, найдите препарат и добавьте его — справа появится статус «Есть / Мало / Нет».</li>
+                            <li>Или нажмите <strong>Проверить справочник</strong> ниже: приложение опросит tabletka.by по первым препаратам каталога (может занять 20–60 сек).</li>
+                        </ol>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm table-striped align-middle mb-0">
@@ -170,7 +182,7 @@
                                 </tr>
                             </thead>
                             <tbody id="availabilityTableBody">
-                                <tr><td colspan="4" class="text-muted">Нажмите «Обновить наличие»</td></tr>
+                                <tr><td colspan="4" class="text-muted">Нажмите «Проверить справочник», чтобы запросить наличие на tabletka.by</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -231,8 +243,8 @@
                         <div class="panel-box h-100">
                             <div class="panel-title">Поведение</div>
                             <div class="form-check mt-2">
-                                <input class="form-check-input" type="checkbox" checked>
-                                <label class="form-check-label">Автоматически проверять наличие при запуске</label>
+                                <input class="form-check-input" type="checkbox" id="autoAvailabilityOnAdd" checked>
+                                <label class="form-check-label" for="autoAvailabilityOnAdd">Проверять наличие при добавлении препарата в рецепт</label>
                             </div>
                             <div class="form-check mt-2">
                                 <input class="form-check-input" type="checkbox">
@@ -280,9 +292,14 @@
             <td><input class="form-control form-control-sm drug-packaging-input" type="text"></td>
             <td><input class="form-control form-control-sm drug-dispense-input" type="number" min="1"></td>
             <td>
-                <select class="form-select form-select-sm drug-scheme-select">
-                    <option value="">Выбрать</option>
-                </select>
+                <input
+                    class="form-control form-control-sm drug-scheme-input"
+                    type="text"
+                    list=""
+                    placeholder="Введите схему или выберите"
+                    autocomplete="off"
+                >
+                <datalist class="drug-scheme-datalist"></datalist>
             </td>
             <td><span class="status-badge status-good drug-availability-badge">Есть</span></td>
             <td class="text-end">

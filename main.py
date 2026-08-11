@@ -5,27 +5,13 @@ from pathlib import Path
 import eel
 
 from backend.db import DrugRepository
+from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
 from backend.pdf_gen import generate_prescription_pdf
 from backend.settings import SettingsStore
 from backend.tabletka import availability_to_dict, check_availability_minsk, search_tabletka
 from backend.updater import apply_update, get_update_status, open_repo_in_browser
 from backend.validate import normalize_prescription_payload, validate_prescription_payload
 from backend.version import APP_VERSION, GITHUB_URL
-
-
-DEFAULT_STAMP = (
-    "ООО «Центр здорового сна»\n"
-    "220012, г. Минск, пр-т Независимости,\n"
-    "72А, пом. 1Н. Тел. 017 299-99-92,\n"
-    "029 311-88-44, 033 311-01-44.\n"
-    "УНП 191896187\n"
-    "р/с BY94 PJCB 30120288531000000933\n"
-    "БИК PJCBBY2X в ОАО\n"
-    "«Приор банк», код 749"
-)
-DEFAULT_UNP = "191896187"
-REPOSITORY = DrugRepository(Path(__file__).resolve().parent / "data" / "app.db")
-SETTINGS = SettingsStore(Path(__file__).resolve().parent / "data" / "settings.json")
 
 
 def resource_path(*parts: str) -> Path:
@@ -36,6 +22,10 @@ def resource_path(*parts: str) -> Path:
 def writable_path(*parts: str) -> Path:
     base_path = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
     return base_path.joinpath(*parts)
+
+
+REPOSITORY = DrugRepository(writable_path("data") / "app.db")
+SETTINGS = SettingsStore(writable_path("data") / "settings.json")
 
 
 def setup_logging() -> None:
@@ -168,8 +158,9 @@ def search_tabletka_drugs(query):
 
 
 @eel.expose
-def check_drug_availability(query):
-    return availability_to_dict(check_availability_minsk(query or ""))
+def check_drug_availability(query, aliases=None):
+    alias_list = aliases if isinstance(aliases, list) else []
+    return availability_to_dict(check_availability_minsk(query or "", aliases=alias_list))
 
 
 @eel.expose
@@ -178,7 +169,8 @@ def refresh_catalog_availability(limit=20):
     drugs = REPOSITORY.list_drugs()[: max(1, min(int(limit or 20), 40))]
     rows = []
     for drug in drugs:
-        result = check_availability_minsk(drug["russian_name"])
+        aliases = list(drug.get("trade_names") or [])[:4]
+        result = check_availability_minsk(drug["russian_name"], aliases=aliases)
         rows.append(
             {
                 "mnn": drug["mnn"],

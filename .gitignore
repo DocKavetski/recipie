@@ -24,6 +24,12 @@ data/tabletka_enrich_report.json
 data/tabletka_enrich_empty_report.json
 data/_*.txt
 
+# Local debug probes
+scripts/probe_*.py
+scripts/dump_*.py
+scripts/list_db.py
+scripts/q.json
+
 # Large source materials (local only)
 Протоколы/
 *.pdf
@@ -33,6 +39,7 @@ dist/
 build/
 *.spec
 *.exe
+!scripts/*.ps1
 
 # IDE / OS
 .idea/

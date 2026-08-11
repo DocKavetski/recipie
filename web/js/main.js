@@ -65,8 +65,8 @@ function getRowState(row) {
         form_options: Array.from(row.querySelector(".drug-form-select").options).map((option) => option.value).filter(Boolean),
         dosage_options: Array.from(row.querySelector(".drug-dosage-select").options).map((option) => option.value).filter(Boolean),
         form_dosage_map: JSON.parse(row.dataset.formDosageMap || "{}"),
-        scheme_options: Array.from(row.querySelector(".drug-scheme-select").options).map((option) => option.value).filter(Boolean),
-        selectedScheme: row.querySelector(".drug-scheme-select").value,
+        scheme_options: collectSchemeOptions(row),
+        selectedScheme: row.querySelector(".drug-scheme-input").value.trim(),
         availability: row.querySelector(".drug-availability-badge").textContent.trim(),
     };
 }
@@ -738,15 +738,22 @@ function availabilityMeta(status) {
     if (status === "none") {
         return { label: "Нет", className: "status-none" };
     }
+    if (status === "unknown") {
+        return { label: "?", className: "status-none" };
+    }
     return { label: "Есть", className: "status-good" };
 }
 
 function availabilityFromLabel(label) {
-    if (label === "Мало") {
+    const text = String(label || "").trim();
+    if (text === "Мало") {
         return "low";
     }
-    if (label === "Нет") {
+    if (text === "Нет" || text.startsWith("Нет ") || text === "—") {
         return "none";
+    }
+    if (text === "?" || text === "…" || text === "Нет данных") {
+        return "unknown";
     }
     return "good";
 }
@@ -775,6 +782,55 @@ function fillOptions(select, options, selectedValue) {
         }
         select.appendChild(option);
     });
+}
+
+function collectSchemeOptions(row) {
+    const list = row.querySelector(".drug-scheme-datalist");
+    const values = Array.from(list?.options || [])
+        .map((option) => option.value.trim())
+        .filter(Boolean);
+    const selected = row.querySelector(".drug-scheme-input")?.value.trim() || "";
+    if (selected && !values.includes(selected)) {
+        values.push(selected);
+    }
+    return values;
+}
+
+function ensureSchemeListId(row) {
+    const input = row.querySelector(".drug-scheme-input");
+    const list = row.querySelector(".drug-scheme-datalist");
+    if (!input || !list) {
+        return;
+    }
+    if (!list.id) {
+        list.id = `scheme-list-${Math.random().toString(36).slice(2, 10)}`;
+    }
+    input.setAttribute("list", list.id);
+}
+
+function fillSchemeOptions(row, options, selectedValue) {
+    ensureSchemeListId(row);
+    const list = row.querySelector(".drug-scheme-datalist");
+    const input = row.querySelector(".drug-scheme-input");
+    const values = [];
+    for (const optionValue of options || []) {
+        const text = String(optionValue || "").trim();
+        if (text && !values.includes(text)) {
+            values.push(text);
+        }
+    }
+    const selected = String(selectedValue || "").trim();
+    if (selected && !values.includes(selected)) {
+        values.unshift(selected);
+    }
+
+    list.innerHTML = "";
+    values.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        list.appendChild(option);
+    });
+    input.value = selected || values[0] || "";
 }
 
 function resolveDrugByQuery(query) {
@@ -885,16 +941,30 @@ function bindTradeSelect(row) {
     }
 }
 
-function bindSchemeSelect(row) {
-    const schemeSelect = row.querySelector(".drug-scheme-select");
-    if (!schemeSelect.dataset.bound) {
-        schemeSelect.addEventListener("change", () => {
-            if (schemeSelect.value) {
-                setStatus("Для препарата выбрана схема из списка.");
-            }
-        });
-        schemeSelect.dataset.bound = "true";
+function bindSchemeInput(row) {
+    const schemeInput = row.querySelector(".drug-scheme-input");
+    if (!schemeInput || schemeInput.dataset.bound) {
+        return;
     }
+    ensureSchemeListId(row);
+    const persistScheme = () => {
+        const value = schemeInput.value.trim();
+        if (value) {
+            const list = row.querySelector(".drug-scheme-datalist");
+            const exists = Array.from(list.options).some((option) => option.value === value);
+            if (!exists) {
+                const option = document.createElement("option");
+                option.value = value;
+                list.appendChild(option);
+            }
+            setStatus("Схема приёма сохранена.");
+        }
+        scheduleAutosave();
+    };
+    schemeInput.addEventListener("input", () => scheduleAutosave());
+    schemeInput.addEventListener("change", persistScheme);
+    schemeInput.addEventListener("blur", persistScheme);
+    schemeInput.dataset.bound = "true";
 }
 
 function dosagesForForm(row, form) {
@@ -963,10 +1033,13 @@ function populateRow(row, drug, options = {}) {
     fillOptions(dosageSelect, dosesForSelected, selectedDosage);
 
     const tradeSelect = row.querySelector(".drug-trade-select");
-    const schemeSelect = row.querySelector(".drug-scheme-select");
     const selectedTrade = options.selectedTrade || "";
     fillOptions(tradeSelect, drug.trade_names || [], selectedTrade);
-    fillOptions(schemeSelect, drug.scheme_options || [], options.selectedScheme || drug.scheme_options?.[0] || "");
+    fillSchemeOptions(
+        row,
+        drug.scheme_options || [],
+        options.selectedScheme || drug.selectedScheme || drug.scheme_options?.[0] || "",
+    );
 
     const selectedDetails = (drug.trade_details || {})[selectedTrade];
     if (selectedDetails) {
@@ -1029,22 +1102,73 @@ function addDrugFromSearch(drug) {
 
     const row = drugRowsContainer.lastElementChild;
     if (row) {
-        refreshRowAvailability(row, drug.russian_name || drug.mnn);
+        refreshRowAvailability(row);
     }
 }
 
-async function refreshRowAvailability(row, query) {
+function rowAvailabilityQuery(row) {
+    const russian = row.querySelector(".drug-russian-input")?.value.trim() || "";
+    const trade = row.querySelector(".drug-trade-select")?.value.trim() || "";
+    const mnn = row.querySelector(".drug-mnn-input")?.value.trim() || "";
+    const aliases = [];
+    if (trade && trade !== russian) {
+        aliases.push(trade);
+    }
+    Array.from(row.querySelector(".drug-trade-select")?.options || [])
+        .map((option) => option.value.trim())
+        .filter((value) => value && value !== russian && !aliases.includes(value))
+        .slice(0, 3)
+        .forEach((value) => aliases.push(value));
+    return {
+        query: russian || trade || mnn,
+        aliases,
+    };
+}
+
+async function refreshRowAvailability(row, query = null) {
+    const autoCheck = document.getElementById("autoAvailabilityOnAdd");
+    if (autoCheck && !autoCheck.checked) {
+        setAvailabilityBadge(row, "none");
+        const badge = row.querySelector(".drug-availability-badge");
+        if (badge) {
+            badge.textContent = "—";
+            badge.title = "Автопроверка отключена в Настройках";
+        }
+        return;
+    }
     if (!window.eel || typeof window.eel.check_drug_availability !== "function") {
         return;
     }
+    const request = query
+        ? { query, aliases: [] }
+        : rowAvailabilityQuery(row);
+    if (!request.query) {
+        return;
+    }
+    setAvailabilityBadge(row, "unknown");
+    const badge = row.querySelector(".drug-availability-badge");
+    if (badge) {
+        badge.textContent = "…";
+        badge.title = "Проверяю tabletka.by…";
+    }
     try {
-        const result = await window.eel.check_drug_availability(query)();
+        const result = await window.eel.check_drug_availability(request.query, request.aliases)();
         if (result && result.status) {
             setAvailabilityBadge(row, result.status);
-            setStatus(`${query}: ${result.label} (${result.pharmacies_minsk || 0} аптек в Минске)`);
+            if (result.label && result.status !== "good" && result.status !== "low" && result.status !== "none") {
+                badge.textContent = result.label;
+            }
+            if (badge) {
+                badge.title = result.message || result.label || "";
+            }
+            setStatus(`${request.query}: ${result.label} (${result.pharmacies_minsk || 0} аптек в Минске)`);
         }
     } catch (error) {
         console.error(error);
+        if (badge) {
+            badge.textContent = "?";
+            badge.title = "Не удалось проверить tabletka.by";
+        }
     }
 }
 
@@ -1178,7 +1302,7 @@ function addDrugRow(drug = null, options = {}) {
     bindModeSelect(row);
     bindTradeSelect(row);
     bindFormDosageSelects(row);
-    bindSchemeSelect(row);
+    bindSchemeInput(row);
     bindRowRemoval(row);
     setAvailabilityBadge(row, options.availability || "none");
 
@@ -1232,14 +1356,14 @@ function restoreFormState(state, options = {}) {
                 availability: availabilityFromLabel(drug.availability),
             },
         );
-
-        const lastRow = drugRowsContainer.lastElementChild;
-        if (lastRow && drug.selectedScheme) {
-            lastRow.querySelector(".drug-scheme-select").value = drug.selectedScheme;
-        }
     }
 
     ageValue.value = calculateAge(birthDateInput.value);
+
+    // Перепроверяем наличие, чтобы не показывать устаревшее «Нет» из автосохранения
+    Array.from(drugRowsContainer.querySelectorAll(".drug-row")).forEach((row) => {
+        refreshRowAvailability(row);
+    });
 }
 
 function initDoctorModal() {

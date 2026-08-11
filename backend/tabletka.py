@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urljoin
 
 import requests
@@ -14,6 +14,8 @@ from bs4 import BeautifulSoup
 LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://tabletka.by"
+# id региона «Минск» на tabletka.by (см. li.select-check-item)
+MINSK_REGION_ID = "1001"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -53,6 +55,15 @@ def _parse_int(text: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _extract_result_id(href: str) -> str | None:
+    match = re.search(r"[?&]ls=(\d+)", href or "")
+    return match.group(1) if match else None
+
+
+def _offer_url(result_id: str) -> str:
+    return urljoin(BASE_URL, f"/result/?ls={result_id}&region={MINSK_REGION_ID}")
+
+
 def search_tabletka(query: str, limit: int = 8) -> list[TabletkaOffer]:
     """Поиск препаратов на tabletka.by."""
     q = str(query or "").strip()
@@ -71,22 +82,22 @@ def search_tabletka(query: str, limit: int = 8) -> list[TabletkaOffer]:
     offers: list[TabletkaOffer] = []
     seen: set[str] = set()
 
-    for anchor in soup.select("a[href*='/result/']"):
+    # Основная таблица результатов; запасной путь — любые ссылки с ls=
+    anchors = soup.select("table a[href*='ls=']") or soup.select("a[href*='ls=']")
+    for anchor in anchors:
         href = anchor.get("href") or ""
-        match = re.search(r"ls=(\d+)", href)
-        if not match:
+        if "/result" not in href:
             continue
-        result_id = match.group(1)
-        if result_id in seen:
+        result_id = _extract_result_id(href)
+        if not result_id or result_id in seen:
             continue
 
-        # Собираем соседние тексты карточки
         card = anchor.find_parent(["tr", "div", "li", "td"]) or anchor
         texts = [t.strip() for t in card.stripped_strings if t.strip()]
         name = texts[0] if texts else anchor.get_text(" ", strip=True)
         form = ""
         pharmacies_total = None
-        for text in texts[1:6]:
+        for text in texts[1:8]:
             low = text.lower()
             if "аптек" in low:
                 pharmacies_total = _parse_int(text)
@@ -101,7 +112,7 @@ def search_tabletka(query: str, limit: int = 8) -> list[TabletkaOffer]:
                 form=form,
                 pharmacies_total=pharmacies_total,
                 result_id=result_id,
-                url=urljoin(BASE_URL, f"/result/?ls={result_id}&city=minsk"),
+                url=_offer_url(result_id),
             )
         )
         if len(offers) >= limit:
@@ -110,13 +121,34 @@ def search_tabletka(query: str, limit: int = 8) -> list[TabletkaOffer]:
     return offers
 
 
+def _count_pharmacy_rows(html: str) -> int:
+    """Считаем строки аптек с ценой. При region=1001 это аптеки Минска."""
+    soup = BeautifulSoup(html, "html.parser")
+    count = 0
+    for row in soup.select("table tr"):
+        text = row.get_text(" ", strip=True)
+        if not text or text.startswith("Аптека"):
+            continue
+        if re.search(r"\d+[.,]\d+\s*р", text):
+            count += 1
+    if count:
+        return count
+
+    # fallback без явной цены
+    for row in soup.select("table tr"):
+        text = row.get_text(" ", strip=True)
+        if "Минск" in text and ("Добавить" in text or "р." in text):
+            count += 1
+    return count
+
+
 def count_minsk_pharmacies(result_id: str) -> int:
-    """Сколько аптек Минска показывают наличие для позиции ls=..."""
+    """Сколько аптек Минска показывают товар для позиции ls=..."""
     session = _session()
     try:
         response = session.get(
             f"{BASE_URL}/result/",
-            params={"ls": result_id, "city": "minsk"},
+            params={"ls": result_id, "region": MINSK_REGION_ID},
             timeout=25,
         )
         response.raise_for_status()
@@ -124,29 +156,34 @@ def count_minsk_pharmacies(result_id: str) -> int:
         LOGGER.warning("tabletka result failed for ls=%s: %s", result_id, exc)
         return 0
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    count = 0
-    for row in soup.select("table tr"):
-        text = row.get_text(" ", strip=True)
-        if "Минск" in text and re.search(r"\d+[.,]\d+\s*р", text):
-            count += 1
-    if count:
-        return count
-
-    # fallback: любые строки таблицы с Минск
-    for row in soup.select("table tr"):
-        text = row.get_text(" ", strip=True)
-        if text.startswith("Минск") or ", Минск" in text or "Минск-" in text:
-            if "Добавить" in text or "р." in text:
-                count += 1
-    return count
+    return _count_pharmacy_rows(response.text)
 
 
-def check_availability_minsk(query: str) -> MinskAvailability:
-    offers = search_tabletka(query)
+def _unique_queries(query: str, aliases: Iterable[str] | None = None) -> list[str]:
+    values: list[str] = []
+    for item in [query, *(aliases or [])]:
+        text = str(item or "").strip()
+        if text and text not in values:
+            values.append(text)
+    return values
+
+
+def check_availability_minsk(
+    query: str,
+    aliases: Iterable[str] | None = None,
+) -> MinskAvailability:
+    queries = _unique_queries(query, aliases)
+    offers: list[TabletkaOffer] = []
+    used_query = query
+    for candidate in queries:
+        offers = search_tabletka(candidate)
+        if offers:
+            used_query = candidate
+            break
+
     if not offers:
         return MinskAvailability(
-            query=query,
+            query=used_query,
             status="unknown",
             label="Нет данных",
             pharmacies_minsk=0,
@@ -176,20 +213,20 @@ def check_availability_minsk(query: str) -> MinskAvailability:
     elif minsk_total >= 1:
         status, label = "low", "Мало"
     else:
-        # если по Минску 0, но по РБ много — всё же «мало/нет»
         rb = max((o.pharmacies_total or 0) for o in offers[:3])
         if rb > 0:
             status, label = "none", "Нет в Минске"
         else:
+            # region-фильтр уже применён: 0 строк = нет в Минске на выдаче
             status, label = "none", "Нет"
 
     return MinskAvailability(
-        query=query,
+        query=used_query,
         status=status,
         label=label,
         pharmacies_minsk=minsk_total,
         offers=serialized,
-        message=f"Минск: {minsk_total} аптек(и) по топ-позициям tabletka.by",
+        message=f"Минск: {minsk_total} аптек(и) по tabletka.by (region={MINSK_REGION_ID})",
     )
 
 

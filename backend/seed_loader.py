@@ -205,7 +205,19 @@ def normalize_seed_item(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def load_seed_drugs(path: Path | None = None) -> list[dict[str, Any]]:
-    seed_path = path or Path(__file__).resolve().parents[1] / "data" / "seed_drugs_from_protocols.json"
+    import sys
+
+    candidates: list[Path] = []
+    if path is not None:
+        candidates.append(Path(path))
+    root = Path(__file__).resolve().parents[1]
+    candidates.append(root / "data" / "seed_drugs_from_protocols.json")
+    if getattr(sys, "frozen", False):
+        meipass = Path(getattr(sys, "_MEIPASS", root))
+        candidates.append(meipass / "data" / "seed_drugs_from_protocols.json")
+        candidates.append(Path(sys.executable).resolve().parent / "data" / "seed_drugs_from_protocols.json")
+
+    seed_path = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
     raw = json.loads(seed_path.read_text(encoding="utf-8"))
     drugs: list[dict[str, Any]] = []
     seen: set[str] = set()
