@@ -109,3 +109,37 @@ def test_parse_empty_text(tmp_path: Path):
     result = parse_treatment_text("   \n", catalog)
     assert result["ok"] is False
     assert result["drugs"] == []
+
+
+def test_parse_real_diary_style(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    text = """
+    Флувоксин 100 мг по 1 т на ночь (№90)
+    Таб. Кветиапин (Кетилепт, Квентиакс, Кутипин, Кьюпинекс) 200 мг №150 по 1,5т на ночь;
+    Таб. Оксетол 300 мг по 1 т на ночь (№90)
+    """
+    result = parse_treatment_text(text, catalog)
+    assert result["ok"] is True
+    assert result["unmatched"] == []
+    assert len(result["drugs"]) == 3
+
+    fluvox, quet, oxcarb = result["drugs"]
+    assert fluvox["mnn"] == "Fluvoxamine"
+    assert fluvox["mode"] == "trade"
+    assert fluvox["selectedTrade"] == "Флувоксин"
+    assert fluvox["dosage"] == "100 мг"
+    assert fluvox["dispenseQty"] == 90
+    assert "на ночь" in fluvox["selectedScheme"]
+    assert "№" not in fluvox["selectedScheme"]
+
+    assert quet["mnn"] == "Quetiapine"
+    assert quet["mode"] == "mnn"
+    assert quet["dosage"] == "200 мг"
+    assert quet["dispenseQty"] == 150
+    assert quet["drug_form"] == "Tab."
+    assert "1,5" in quet["selectedScheme"] or "1.5" in quet["selectedScheme"]
+
+    assert oxcarb["mnn"] == "Oxcarbazepine"
+    assert oxcarb["selectedTrade"] == "Оксетол"
+    assert oxcarb["dosage"] == "300 мг"
+    assert oxcarb["dispenseQty"] == 90

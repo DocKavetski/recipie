@@ -18,8 +18,10 @@ _SKIP_LINE = re.compile(
 _BULLET = re.compile(r"^\s*(?:[-–—*•]+|\d+[.)]|\(\d+\))\s*")
 
 _FORM_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bтаб\.?\b", re.IGNORECASE), "Tab."),
     (re.compile(r"\btab(?:lets?)?\.?\b", re.IGNORECASE), "Tab."),
     (re.compile(r"\bтаблет(?:к[аи]|ок|ке|ку)?\b", re.IGNORECASE), "Tab."),
+    (re.compile(r"\bкапс\.?\b", re.IGNORECASE), "Caps."),
     (re.compile(r"\bcaps?(?:ules?)?\.?\b", re.IGNORECASE), "Caps."),
     (re.compile(r"\bкапсул(?:ы|а|е|у)?\b", re.IGNORECASE), "Caps."),
     (re.compile(r"\bsir(?:up)?\.?\b", re.IGNORECASE), "Sir."),
@@ -40,10 +42,20 @@ _SCHEME_HINT = re.compile(
     r"раза?\s+в\s+день|р/?д|"
     r"через\s+день|по\s+потребности|"
     r"на\s+ночь|перед\s+сном|после\s+еды|до\s+еды|"
-    r"1/2|½|табл"
+    r"1/2|½|1[,.]5\s*т|табл|\d+\s*т\b"
     r")\b",
     re.IGNORECASE,
 )
+
+_PACK_QTY_RE = re.compile(r"\(?\s*[№N]\s*(\d+)\s*\)?", re.IGNORECASE)
+_PAREN_BLOCK_RE = re.compile(r"\([^)]*\)")
+
+_KIND_PRIORITY = {
+    "russian": 0,
+    "mnn": 1,
+    "alias": 2,
+    "trade": 3,
+}
 
 
 def normalize_match_text(value: Any) -> str:
@@ -210,28 +222,60 @@ def pick_catalog_dosage(drug: dict[str, Any], requested: str, form: str) -> str:
     return str(drug.get("dosage") or options[0])
 
 
+def extract_pack_qty(text: str) -> tuple[int | None, str]:
+    match = _PACK_QTY_RE.search(text or "")
+    if not match:
+        return None, text
+    try:
+        qty = int(match.group(1))
+    except ValueError:
+        return None, text
+    cleaned = f"{text[:match.start()]} {text[match.end():]}"
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;")
+    return qty, cleaned
+
+
+def strip_parentheticals(text: str) -> str:
+    cleaned = _PAREN_BLOCK_RE.sub(" ", text or "")
+    return re.sub(r"\s+", " ", cleaned).strip(" ,.;")
+
+
 def find_drug_in_line(line: str, index: list[_NameEntry]) -> tuple[_NameEntry | None, str]:
     normalized = normalize_match_text(line)
     if not normalized:
         return None, line
 
+    # Берём самое левое совпадение; при равной позиции — МНН/русское имя важнее торгового
+    # (чтобы «Кветиапин (Кетилепт, Квентиакс…)» не цеплялся за название в скобках).
+    best: tuple[int, int, int, _NameEntry, re.Match[str]] | None = None
     for entry in index:
         pattern = _word_boundary_pattern(entry.key)
         match = pattern.search(normalized)
         if not match:
             continue
-        # Вырезаем найденное имя из исходной строки приблизительно по позиции
-        # через повторный поиск без учёта регистра в исходнике.
-        source_pattern = _word_boundary_pattern(entry.display if entry.display else entry.key)
-        source_match = source_pattern.search(line) or source_pattern.search(normalize_match_text(line))
-        if source_match and source_match.string is line:
-            remainder = f"{line[:source_match.start()]} {line[source_match.end():]}"
-        else:
-            # fallback: удалить первое вхождение нормализованного ключа
-            remainder = re.sub(pattern, " ", normalized, count=1)
-        remainder = re.sub(r"\s+", " ", remainder).strip(" ,.;")
-        return entry, remainder
-    return None, line
+        candidate = (
+            match.start(),
+            _KIND_PRIORITY.get(entry.kind, 9),
+            -len(entry.key),
+            entry,
+            match,
+        )
+        if best is None or candidate[:3] < best[:3]:
+            best = candidate
+
+    if not best:
+        return None, line
+
+    entry = best[3]
+    source_pattern = _word_boundary_pattern(entry.display if entry.display else entry.key)
+    source_match = source_pattern.search(line)
+    if source_match:
+        remainder = f"{line[:source_match.start()]} {line[source_match.end():]}"
+    else:
+        remainder = re.sub(_word_boundary_pattern(entry.key), " ", normalized, count=1)
+    remainder = strip_parentheticals(remainder)
+    remainder = re.sub(r"\s+", " ", remainder).strip(" ,.;")
+    return entry, remainder
 
 
 def drug_payload_from_match(
@@ -240,19 +284,23 @@ def drug_payload_from_match(
     drug_form: str = "",
     dosage: str = "",
     scheme: str = "",
+    dispense_qty: int | None = None,
 ) -> dict[str, Any]:
     drug = entry.drug
     form = pick_catalog_form(drug, drug_form)
     dose = pick_catalog_dosage(drug, dosage, form)
     selected_trade = entry.display if entry.kind == "trade" else ""
     mode = "trade" if selected_trade else "mnn"
-    return {
+    packaging = drug.get("packaging") or ""
+    if dispense_qty:
+        packaging = f"N{dispense_qty}"
+    payload = {
         "mnn": drug.get("mnn"),
         "russian_name": drug.get("russian_name"),
         "latin_name": drug.get("latin_name"),
         "drug_form": form,
         "dosage": dose,
-        "packaging": drug.get("packaging") or "",
+        "packaging": packaging,
         "trade_names": list(drug.get("trade_names") or []),
         "form_options": list(drug.get("form_options") or []),
         "dosage_options": list(drug.get("dosage_options") or []),
@@ -265,6 +313,9 @@ def drug_payload_from_match(
         "matched_as": entry.display,
         "match_kind": entry.kind,
     }
+    if dispense_qty:
+        payload["dispenseQty"] = dispense_qty
+    return payload
 
 
 def split_head_and_scheme(line: str) -> tuple[str, str]:
@@ -279,26 +330,41 @@ def split_head_and_scheme(line: str) -> tuple[str, str]:
 
 def parse_treatment_line(line: str, index: list[_NameEntry]) -> dict[str, Any] | None:
     head, scheme = split_head_and_scheme(line)
+    pack_qty, head = extract_pack_qty(head)
     form, head = extract_form(head)
     dosage, head = extract_dosage(head)
-    entry, remainder = find_drug_in_line(head, index)
+    # Скобки с перечнем торговых — не мешают поиску МНН в начале строки
+    head_for_match = strip_parentheticals(head) or head
+    entry, remainder = find_drug_in_line(head_for_match, index)
     if not entry:
-        return None
+        entry, remainder = find_drug_in_line(head, index)
+        if not entry:
+            return None
 
-    # Форму/дозу иногда пишут после названия — добираем только из «головы»,
-    # не трогая уже отделённую схему (чтобы «таблетке» в схеме не съедалось).
     form2, remainder = extract_form(remainder)
     dose2, remainder = extract_dosage(remainder)
+    pack2, remainder = extract_pack_qty(remainder)
     form = form or form2
     dosage = dosage or dose2
+    pack_qty = pack_qty or pack2
 
-    if not scheme:
-        scheme = extract_scheme(remainder)
-    elif remainder and _SCHEME_HINT.search(remainder) and remainder not in scheme:
-        # На случай «Эсциталопрам утром — по 1 таб.» оставляем схему после тире.
-        pass
+    if scheme:
+        pack3, scheme = extract_pack_qty(scheme)
+        pack_qty = pack_qty or pack3
+        scheme = strip_parentheticals(scheme) or scheme
+    else:
+        pack3, remainder = extract_pack_qty(remainder)
+        pack_qty = pack_qty or pack3
+        scheme = extract_scheme(strip_parentheticals(remainder) or remainder)
 
-    return drug_payload_from_match(entry, drug_form=form, dosage=dosage, scheme=scheme)
+    scheme = re.sub(r"\s+", " ", scheme or "").strip(" ,.;")
+    return drug_payload_from_match(
+        entry,
+        drug_form=form,
+        dosage=dosage,
+        scheme=scheme,
+        dispense_qty=pack_qty,
+    )
 
 
 def parse_treatment_text(text: Any, catalog: list[dict[str, Any]]) -> dict[str, Any]:

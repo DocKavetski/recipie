@@ -1656,6 +1656,7 @@ function applyParsedTreatmentDrugs(drugs) {
                 selectedTrade: drug.selectedTrade || "",
                 drug_form: drug.drug_form,
                 dosage: drug.dosage,
+                dispenseQty: drug.dispenseQty || drug.dispense_qty || undefined,
                 selectedScheme: drug.selectedScheme || "",
                 availability: "unknown",
             },
@@ -1743,8 +1744,10 @@ function splitTreatmentLinesLocal(text) {
 
 function extractTreatmentFormLocal(line) {
     const patterns = [
+        [/\bтаб\.?\b/i, "Tab."],
         [/\btab(?:lets?)?\.?\b/i, "Tab."],
         [/\bтаблет(?:к[аи]|ок|ке|ку)?\b/i, "Tab."],
+        [/\bкапс\.?\b/i, "Caps."],
         [/\bcaps?(?:ules?)?\.?\b/i, "Caps."],
         [/\bкапсул(?:ы|а|е|у)?\b/i, "Caps."],
         [/\bsir(?:up)?\.?\b/i, "Sir."],
@@ -1761,6 +1764,25 @@ function extractTreatmentFormLocal(line) {
         return { form, line: cleaned };
     }
     return { form: "", line };
+}
+
+function extractTreatmentPackQtyLocal(line) {
+    const match = String(line || "").match(/\(?\s*[№N]\s*(\d+)\s*\)?/i);
+    if (!match) {
+        return { qty: null, line };
+    }
+    const qty = Number.parseInt(match[1], 10);
+    const cleaned = `${line.slice(0, match.index)} ${line.slice(match.index + match[0].length)}`
+        .replace(/\s+/g, " ")
+        .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+    return { qty: Number.isFinite(qty) ? qty : null, line: cleaned };
+}
+
+function stripTreatmentParentheticalsLocal(line) {
+    return String(line || "")
+        .replace(/\([^)]*\)/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
 }
 
 function extractTreatmentDoseLocal(line) {
@@ -1791,7 +1813,7 @@ function extractTreatmentSchemeLocal(line) {
     if (!text) {
         return "";
     }
-    const hint = text.match(/\b(?:по\s+\d|утром|вечером|ноч[ьюи]|днём|днем|раза?\s+в\s+день|р\/?д|через\s+день|по\s+потребности|на\s+ночь|перед\s+сном|после\s+еды|до\s+еды|1\/2|½|табл)/i);
+    const hint = text.match(/\b(?:по\s+\d|утром|вечером|ноч[ьюи]|днём|днем|раза?\s+в\s+день|р\/?д|через\s+день|по\s+потребности|на\s+ночь|перед\s+сном|после\s+еды|до\s+еды|1\/2|½|1[,.]5\s*т|табл|\d+\s*т\b)/i);
     if (hint) {
         return text.slice(hint.index).replace(/^[,.;\s]+|[,.;\s]+$/g, "");
     }
@@ -1803,25 +1825,34 @@ function findTreatmentDrugInLine(line, index) {
     if (!normalized) {
         return null;
     }
+    const kindPriority = { russian: 0, mnn: 1, alias: 2, trade: 3 };
+    let best = null;
     for (const entry of index) {
         const escaped = entry.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const pattern = new RegExp(`(?<!\\w)${escaped}[a-zа-я]{0,3}(?!\\w)`, "i");
-        if (!pattern.test(normalized)) {
+        const match = pattern.exec(normalized);
+        if (!match) {
             continue;
         }
-        const sourceEscaped = String(entry.display || entry.key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const sourcePattern = new RegExp(`(?<!\\w)${sourceEscaped}[a-zа-я]{0,3}(?!\\w)`, "i");
-        const sourceMatch = sourcePattern.exec(line);
-        let remainder = line;
-        if (sourceMatch) {
-            remainder = `${line.slice(0, sourceMatch.index)} ${line.slice(sourceMatch.index + sourceMatch[0].length)}`;
-        } else {
-            remainder = normalized.replace(pattern, " ");
+        const rank = [match.index, kindPriority[entry.kind] ?? 9, -entry.key.length];
+        if (!best || rank[0] < best.rank[0] || (rank[0] === best.rank[0] && (rank[1] < best.rank[1] || (rank[1] === best.rank[1] && rank[2] < best.rank[2])))) {
+            best = { entry, rank, pattern };
         }
-        remainder = remainder.replace(/\s+/g, " ").replace(/^[,.;\s]+|[,.;\s]+$/g, "");
-        return { entry, remainder };
     }
-    return null;
+    if (!best) {
+        return null;
+    }
+    const sourceEscaped = String(best.entry.display || best.entry.key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const sourcePattern = new RegExp(`(?<!\\w)${sourceEscaped}[a-zа-я]{0,3}(?!\\w)`, "i");
+    const sourceMatch = sourcePattern.exec(line);
+    let remainder = line;
+    if (sourceMatch) {
+        remainder = `${line.slice(0, sourceMatch.index)} ${line.slice(sourceMatch.index + sourceMatch[0].length)}`;
+    } else {
+        remainder = normalized.replace(best.pattern, " ");
+    }
+    remainder = stripTreatmentParentheticalsLocal(remainder);
+    return { entry: best.entry, remainder };
 }
 
 function pickTreatmentForm(drug, requested) {
@@ -1875,11 +1906,16 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
     for (const line of lines) {
         const { head, scheme: schemeFromSplit } = splitTreatmentHeadAndScheme(line);
         let working = head;
+        let packQty = null;
+        const packExtract = extractTreatmentPackQtyLocal(working);
+        packQty = packExtract.qty;
+        working = packExtract.line;
         const formExtract = extractTreatmentFormLocal(working);
         working = formExtract.line;
         const doseExtract = extractTreatmentDoseLocal(working);
         working = doseExtract.line;
-        const found = findTreatmentDrugInLine(working, index);
+        const found = findTreatmentDrugInLine(stripTreatmentParentheticalsLocal(working) || working, index)
+            || findTreatmentDrugInLine(working, index);
         if (!found) {
             unmatched.push(line);
             continue;
@@ -1889,17 +1925,31 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
         remainder = form2.line;
         const dose2 = extractTreatmentDoseLocal(remainder);
         remainder = dose2.line;
+        const pack2 = extractTreatmentPackQtyLocal(remainder);
+        remainder = pack2.line;
+        packQty = packQty || pack2.qty;
+        let scheme = schemeFromSplit || "";
+        if (scheme) {
+            const pack3 = extractTreatmentPackQtyLocal(scheme);
+            packQty = packQty || pack3.qty;
+            scheme = stripTreatmentParentheticalsLocal(pack3.line) || pack3.line;
+        } else {
+            const pack3 = extractTreatmentPackQtyLocal(remainder);
+            packQty = packQty || pack3.qty;
+            scheme = extractTreatmentSchemeLocal(stripTreatmentParentheticalsLocal(pack3.line) || pack3.line);
+        }
         const form = pickTreatmentForm(found.entry.drug, formExtract.form || form2.form);
         const dosage = pickTreatmentDosage(found.entry.drug, doseExtract.dosage || dose2.dosage, form);
-        const scheme = schemeFromSplit || extractTreatmentSchemeLocal(remainder);
         const drug = found.entry.drug;
         const selectedTrade = found.entry.kind === "trade" ? found.entry.display : "";
         const payload = {
             ...drug,
             drug_form: form,
             dosage,
+            packaging: packQty ? `N${packQty}` : (drug.packaging || ""),
+            dispenseQty: packQty || undefined,
             selectedTrade,
-            selectedScheme: scheme,
+            selectedScheme: String(scheme || "").replace(/\s+/g, " ").replace(/^[,.;\s]+|[,.;\s]+$/g, ""),
             mode: selectedTrade ? "trade" : "mnn",
             matched_as: found.entry.display,
             match_kind: found.entry.kind,
