@@ -244,6 +244,15 @@ class DrugRepository:
             row = cursor.fetchone()
             return json.loads(row["payload_json"]) if row else None
 
+    def delete_template(self, name: str) -> dict[str, Any]:
+        template_name = str(name or "").strip()
+        if not template_name:
+            raise ValueError("Template name is required.")
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM templates WHERE name = ?", (template_name,))
+            connection.commit()
+        return {"ok": True, "deleted": cursor.rowcount > 0, "name": template_name}
+
     def save_drug_schemes(self, mnn: str, scheme_options: list[str]) -> dict[str, Any]:
         key = str(mnn or "").strip()
         if not key:

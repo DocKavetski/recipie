@@ -202,6 +202,11 @@ def load_template(name):
 
 
 @eel.expose
+def delete_template(name):
+    return REPOSITORY.delete_template(name or "")
+
+
+@eel.expose
 def search_tabletka_drugs(query):
     offers = search_tabletka(query or "")
     return [

@@ -315,6 +315,16 @@ body {
     font-weight: 700;
 }
 
+.template-preview-box {
+    min-height: 90px;
+    padding: 10px 12px;
+    border: 1px solid #d8e1ea;
+    border-radius: 8px;
+    background: #f8fafc;
+    white-space: pre-line;
+    font-size: 13px;
+}
+
 .workspace-grid {
     display: grid;
     gap: 12px;

@@ -23,6 +23,12 @@ const restoreAutosaveBtn = document.getElementById("restoreAutosaveBtn");
 const saveTemplateBtn = document.getElementById("saveTemplateBtn");
 const loadTemplateBtn = document.getElementById("loadTemplateBtn");
 const templateSelect = document.getElementById("templateSelect");
+const templateManagerSelect = document.getElementById("templateManagerSelect");
+const templateManagerName = document.getElementById("templateManagerName");
+const templateManagerSaveBtn = document.getElementById("templateManagerSaveBtn");
+const templateManagerLoadBtn = document.getElementById("templateManagerLoadBtn");
+const templateManagerDeleteBtn = document.getElementById("templateManagerDeleteBtn");
+const templateManagerPreview = document.getElementById("templateManagerPreview");
 const showSchemeBtn = document.getElementById("showSchemeBtn");
 const globalDrugSearch = document.getElementById("globalDrugSearch");
 const drugSearchDropdown = document.getElementById("drugSearchDropdown");
@@ -1543,6 +1549,9 @@ async function refreshTemplates() {
     }
 
     templateSelect.innerHTML = "<option value=\"\">Шаблон</option>";
+    if (templateManagerSelect) {
+        templateManagerSelect.innerHTML = "<option value=\"\">Выберите шаблон</option>";
+    }
 
     try {
         const templates = await window.eel.list_templates()();
@@ -1551,9 +1560,145 @@ async function refreshTemplates() {
             option.value = template.name;
             option.textContent = template.name;
             templateSelect.appendChild(option);
+            if (templateManagerSelect) {
+                const managerOption = document.createElement("option");
+                managerOption.value = template.name;
+                managerOption.textContent = template.name;
+                templateManagerSelect.appendChild(managerOption);
+            }
         }
     } catch (error) {
         console.error(error);
+    }
+}
+
+async function renderTemplateManagerPreview(name) {
+    if (!templateManagerPreview) {
+        return;
+    }
+    const templateName = String(name || "").trim();
+    if (!templateName) {
+        templateManagerPreview.textContent = "Выберите шаблон для просмотра состава.";
+        return;
+    }
+    if (!window.eel || typeof window.eel.load_template !== "function") {
+        templateManagerPreview.textContent = "Backend недоступен.";
+        return;
+    }
+    try {
+        const state = await window.eel.load_template(templateName)();
+        const drugs = Array.isArray(state?.drugs) ? state.drugs.filter((drug) => drug.mnn || drug.russian_name) : [];
+        if (!drugs.length) {
+            templateManagerPreview.textContent = "Шаблон пуст.";
+            return;
+        }
+        const lines = drugs.map((drug, index) => {
+            const title = drug.russian_name || drug.mnn || "Препарат";
+            const dose = drug.dosage ? ` ${drug.dosage}` : "";
+            const scheme = drug.selectedScheme ? ` — ${drug.selectedScheme}` : "";
+            return `${index + 1}. ${title}${dose}${scheme}`;
+        });
+        templateManagerPreview.textContent = lines.join("\n");
+    } catch (error) {
+        console.error(error);
+        templateManagerPreview.textContent = "Не удалось прочитать шаблон.";
+    }
+}
+
+async function loadTemplateIntoForm(templateName) {
+    if (!templateName) {
+        setStatus("Выберите шаблон для загрузки.");
+        return false;
+    }
+    try {
+        const state = await window.eel.load_template(templateName)();
+        if (!state) {
+            setStatus("Шаблон не найден.");
+            return false;
+        }
+        restoreFormState(state, { keepCardNumber: true });
+        setStatus(`Шаблон «${templateName}» загружен.`);
+        return true;
+    } catch (error) {
+        console.error(error);
+        setStatus("Не удалось загрузить шаблон.");
+        return false;
+    }
+}
+
+async function bindTemplateManagerControls() {
+    if (!templateManagerSelect || templateManagerSelect.dataset.bound) {
+        return;
+    }
+    templateManagerSelect.addEventListener("change", async () => {
+        const selected = templateManagerSelect.value;
+        if (templateManagerName) {
+            templateManagerName.value = selected;
+        }
+        await renderTemplateManagerPreview(selected);
+    });
+    templateManagerSelect.dataset.bound = "true";
+
+    if (templateManagerSaveBtn && !templateManagerSaveBtn.dataset.bound) {
+        templateManagerSaveBtn.addEventListener("click", async () => {
+            const name = String(templateManagerName?.value || templateManagerSelect.value || "").trim();
+            if (!name) {
+                setStatus("Введите имя шаблона.");
+                return;
+            }
+            try {
+                await window.eel.save_template(name, getFormState())();
+                await refreshTemplates();
+                templateSelect.value = name;
+                templateManagerSelect.value = name;
+                if (templateManagerName) {
+                    templateManagerName.value = name;
+                }
+                await renderTemplateManagerPreview(name);
+                setStatus(`Шаблон «${name}» сохранён.`);
+            } catch (error) {
+                console.error(error);
+                setStatus("Не удалось сохранить шаблон.");
+            }
+        });
+        templateManagerSaveBtn.dataset.bound = "true";
+    }
+
+    if (templateManagerLoadBtn && !templateManagerLoadBtn.dataset.bound) {
+        templateManagerLoadBtn.addEventListener("click", async () => {
+            const name = String(templateManagerSelect.value || templateManagerName?.value || "").trim();
+            if (await loadTemplateIntoForm(name)) {
+                templateSelect.value = name;
+            }
+        });
+        templateManagerLoadBtn.dataset.bound = "true";
+    }
+
+    if (templateManagerDeleteBtn && !templateManagerDeleteBtn.dataset.bound) {
+        templateManagerDeleteBtn.addEventListener("click", async () => {
+            const name = String(templateManagerSelect.value || templateManagerName?.value || "").trim();
+            if (!name) {
+                setStatus("Выберите шаблон для удаления.");
+                return;
+            }
+            if (!window.confirm(`Удалить шаблон «${name}»?`)) {
+                return;
+            }
+            try {
+                await window.eel.delete_template(name)();
+                await refreshTemplates();
+                if (templateManagerName) {
+                    templateManagerName.value = "";
+                }
+                templateSelect.value = "";
+                await renderTemplateManagerPreview("");
+                setStatus(`Шаблон «${name}» удалён.`);
+            } catch (error) {
+                console.error(error);
+                setStatus("Не удалось удалить шаблон.");
+            }
+        });
+        templateManagerDeleteBtn.dataset.bound = "true";
     }
 }
 
@@ -1672,23 +1817,13 @@ async function bindFormActions() {
 
     loadTemplateBtn.addEventListener("click", async () => {
         const templateName = templateSelect.value;
-        if (!templateName) {
-            setStatus("Выберите шаблон для загрузки.");
-            return;
-        }
-
-        try {
-            const state = await window.eel.load_template(templateName)();
-            if (!state) {
-                setStatus("Шаблон не найден.");
-                return;
+        const loaded = await loadTemplateIntoForm(templateName);
+        if (loaded && templateManagerSelect) {
+            templateManagerSelect.value = templateName;
+            if (templateManagerName) {
+                templateManagerName.value = templateName;
             }
-
-            restoreFormState(state, { keepCardNumber: true });
-            setStatus("Шаблон загружен.");
-        } catch (error) {
-            console.error(error);
-            setStatus("Не удалось загрузить шаблон.");
+            await renderTemplateManagerPreview(templateName);
         }
     });
 
@@ -1731,6 +1866,8 @@ async function initPrototype() {
     await loadCatalogFromBackend();
     await loadSettingsFromBackend();
     await refreshTemplates();
+    await bindTemplateManagerControls();
+    await renderTemplateManagerPreview("");
     renderDirectoryTable();
     const startupUpdateStatus = await refreshUpdateStatus({ silent: true });
     await maybeAutoApplyStartupUpdate(startupUpdateStatus);

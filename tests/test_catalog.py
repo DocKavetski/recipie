@@ -67,3 +67,27 @@ def test_custom_scheme_overrides_persist_across_sync(tmp_path: Path):
     restored = next(item for item in repo.list_drugs() if item["mnn"] == "Escitalopram")
     assert restored["scheme_options"] == original["scheme_options"]
     assert restored["has_custom_scheme"] is False
+
+
+def test_template_can_be_deleted(tmp_path: Path):
+    repo = DrugRepository(tmp_path / "app.db")
+    repo.initialize()
+
+    payload = {
+        "card_number": "",
+        "patient_name": "",
+        "birth_date": "",
+        "doctor_name": "",
+        "drugs": [
+            {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "37.5 мг", "selectedScheme": "утром"},
+            {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "75 мг", "selectedScheme": "днём"},
+            {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "150 мг", "selectedScheme": "вечером"},
+        ],
+    }
+    repo.save_template("Венлафаксин титрация", payload)
+    assert repo.get_template("Венлафаксин титрация")
+
+    result = repo.delete_template("Венлафаксин титрация")
+    assert result["ok"] is True
+    assert result["deleted"] is True
+    assert repo.get_template("Венлафаксин титрация") is None

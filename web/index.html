@@ -19,6 +19,7 @@
 
         <ul class="nav nav-tabs app-tabs mb-3" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-recipe" type="button">Рецепт</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-templates" type="button">Шаблоны</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-directory" type="button">Справочник</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-availability" type="button">Наличие</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-settings" type="button">Настройки</button></li>
@@ -120,6 +121,43 @@
                         <button class="btn btn-sm btn-outline-secondary" id="loadTemplateBtn">Загрузить</button>
                     </div>
                 </div>
+                </div>
+            </section>
+
+            <section class="tab-pane fade" id="tab-templates">
+                <div class="panel-box">
+                    <div class="panel-head">
+                        <div>
+                            <div class="panel-title mb-0">Редактор шаблонов</div>
+                            <div class="stub-note">Сложные схемы (например титрация венлафаксина в 3 строки) сохраняйте как шаблон и загружайте в один клик.</div>
+                        </div>
+                    </div>
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label mb-1" for="templateManagerSelect">Сохранённые шаблоны</label>
+                            <select class="form-select form-select-sm" id="templateManagerSelect">
+                                <option value="">Выберите шаблон</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label mb-1" for="templateManagerName">Имя шаблона</label>
+                            <input
+                                class="form-control form-control-sm"
+                                id="templateManagerName"
+                                type="text"
+                                placeholder="Например: Венлафаксин титрация"
+                            >
+                        </div>
+                        <div class="col-12 col-lg-4">
+                            <div class="d-flex flex-wrap gap-2">
+                                <button class="btn btn-sm btn-primary" id="templateManagerSaveBtn" type="button">Сохранить текущую форму</button>
+                                <button class="btn btn-sm btn-outline-secondary" id="templateManagerLoadBtn" type="button">Загрузить шаблон</button>
+                                <button class="btn btn-sm btn-outline-danger" id="templateManagerDeleteBtn" type="button">Удалить</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="small text-muted mb-2">Состав выбранного шаблона:</div>
+                    <div class="template-preview-box" id="templateManagerPreview">Выберите шаблон для просмотра состава.</div>
                 </div>
             </section>
 
