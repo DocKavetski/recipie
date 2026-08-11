@@ -344,19 +344,20 @@ function openPrintPreview(state) {
             <title>Печать рецептов</title>
             <link rel="stylesheet" href="http://127.0.0.1:8000/css/print_blank.css">
             <style>
-              /* fallback styles if css file path differs */
+              /* fallback = print_blank.css (must stay in sync with PDF geometry) */
+              :root{--page-margin:3mm;--gutter:6mm;--blank-pad:1.8mm;--cut-inset:.8mm}
               body{margin:0;background:#d7d7d7;font-family:Arial,Helvetica,sans-serif;color:#111}
-              .a4-sheet{position:relative;width:210mm;height:297mm;margin:10px auto;padding:5mm;background:#fff;page-break-after:always;overflow:hidden;box-sizing:border-box}
-              .a4-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3mm;width:100%;height:100%}
+              .a4-sheet{position:relative;width:210mm;height:297mm;margin:10px auto;padding:var(--page-margin);background:#fff;page-break-after:always;overflow:hidden;box-sizing:border-box}
+              .a4-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:var(--gutter);width:100%;height:100%}
               .duplex-back{direction:rtl}.duplex-back>.blank{direction:ltr}
-              .blank{width:100%;height:100%;padding:1.8mm;overflow:hidden;box-sizing:border-box}
+              .blank{width:100%;height:100%;padding:var(--blank-pad);overflow:hidden;box-sizing:border-box}
               .blank-empty{padding:0;background:transparent}
               .cut-marks{position:absolute;inset:0;pointer-events:none;z-index:5}
               .cut-marks .tick{position:absolute;background:#666}
               .cut-marks .tick-v{width:.25mm;height:4mm;left:50%;transform:translateX(-50%)}
               .cut-marks .tick-h{height:.25mm;width:4mm;top:50%;transform:translateY(-50%)}
-              .cut-marks .tick-top{top:.6mm}.cut-marks .tick-bottom{bottom:.6mm}
-              .cut-marks .tick-left{left:.6mm}.cut-marks .tick-right{right:.6mm}
+              .cut-marks .tick-top{top:var(--cut-inset)}.cut-marks .tick-bottom{bottom:var(--cut-inset)}
+              .cut-marks .tick-left{left:var(--cut-inset)}.cut-marks .tick-right{right:var(--cut-inset)}
               .cut-marks .cross-h,.cut-marks .cross-v{position:absolute;left:50%;top:50%;background:#666}
               .cut-marks .cross-h{width:5mm;height:.25mm;transform:translate(-50%,-50%)}
               .cut-marks .cross-v{width:.25mm;height:5mm;transform:translate(-50%,-50%)}
@@ -374,7 +375,6 @@ function openPrintPreview(state) {
               .front col.c1{width:16.55%}.front col.c2{width:32.90%}.front col.c3{width:50.55%}
               .front .h-r0{height:25mm}.front .h-r1{height:13.5mm}.front .h-r2{height:15.5mm}
               .front .h-r3{height:21mm}.front .h-r4{height:23mm}.front .h-r5{height:23mm}
-              .front .validity{height:9mm}
               .back{font-size:8px}
               .back col.b1{width:30.04%}.back col.b2{width:18.42%}.back col.b3{width:14.48%}
               .back col.b4{width:11.30%}.back col.b5{width:25.76%}
@@ -382,8 +382,8 @@ function openPrintPreview(state) {
               .back .row-1 th{height:14mm}
               .back .row-2 td{height:9mm;border-top:0;text-align:center;vertical-align:middle!important}
               .back .row-3 td{height:13mm;border-left-color:transparent;border-right-color:transparent}
-              .back .row-4 td,.back .row-5 td{height:12mm;text-align:center;vertical-align:middle!important}
-              .back .row-6 td{height:36mm}
+              .back .row-4 td{height:14mm;text-align:center;vertical-align:middle!important}
+              .back .row-5 td{height:10mm;text-align:center;vertical-align:middle!important}
               .strike{text-decoration:line-through}
               @page{size:A4;margin:0}
               @media print{body{background:#fff}.a4-sheet{margin:0;box-shadow:none}}

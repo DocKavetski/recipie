@@ -248,6 +248,53 @@ class TestChunkAndDuplex:
         assert duplex_back_index(3) == 2
 
 
+class TestPrintGeometry:
+    """Лицевая и оборотная должны делить одну геометрию бланка на A4."""
+
+    def test_sheet_fits_a4_with_equal_cut_margins(self):
+        from reportlab.lib.units import mm
+
+        from backend.pdf_gen import (
+            A4_H,
+            A4_W,
+            FORM_H,
+            FORM_W,
+            GUTTER,
+            PAGE_MARGIN,
+        )
+
+        assert PAGE_MARGIN * 2 + FORM_W * 2 + GUTTER == pytest.approx(A4_W)
+        assert PAGE_MARGIN * 2 + FORM_H * 2 + GUTTER == pytest.approx(A4_H)
+        # после реза по центру отступ от края куска == отступ от линии реза
+        assert GUTTER == pytest.approx(2 * PAGE_MARGIN)
+        assert FORM_W == pytest.approx(99 * mm)
+        assert FORM_H == pytest.approx(142.5 * mm)
+
+    def test_front_back_content_boxes_register_on_long_edge_duplex(self):
+        from backend.pdf_gen import A4_W, FORM_H, FORM_W, PAD, _blank_origins
+        from backend.validate import duplex_back_index
+
+        origins = _blank_origins()
+        for front_idx in range(4):
+            ox, oy = origins[front_idx]
+            front_left = ox + PAD
+            front_right = ox + FORM_W - PAD
+            front_bottom = oy + PAD
+            front_top = oy + FORM_H - PAD
+
+            bx, by = origins[duplex_back_index(front_idx)]
+            back_left = bx + PAD
+            back_right = bx + FORM_W - PAD
+            back_bottom = by + PAD
+            back_top = by + FORM_H - PAD
+
+            # L/R flip: x' = A4_W - x (края меняются местами)
+            assert A4_W - back_right == pytest.approx(front_left)
+            assert A4_W - back_left == pytest.approx(front_right)
+            assert back_bottom == pytest.approx(front_bottom)
+            assert back_top == pytest.approx(front_top)
+
+
 class TestPdfSmoke:
     def test_generate_pdf(self, tmp_path):
         from backend.pdf_gen import generate_prescription_pdf

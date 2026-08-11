@@ -15,15 +15,19 @@ from backend.patient_parse import format_name_with_initials, normalize_birth_dat
 from backend.validate import chunk_drugs, duplex_back_index
 
 
-FORM_W = 98.5 * mm
-FORM_H = 142 * mm
+# 4 бланка на A4. Поля и желоб подобраны так, чтобы после разреза
+# по центру у каждого куска были одинаковые отступы со всех сторон
+# (PAGE_MARGIN == GUTTER/2), и лицевая/оборот совпали при дуплексе L/R.
 A4_W = 210 * mm
 A4_H = 297 * mm
-PAGE_MARGIN = 5 * mm
-GUTTER = 3 * mm
+PAGE_MARGIN = 3 * mm
+GUTTER = 6 * mm  # = 2 * PAGE_MARGIN
+FORM_W = (A4_W - 2 * PAGE_MARGIN - GUTTER) / 2  # 99 mm
+FORM_H = (A4_H - 2 * PAGE_MARGIN - GUTTER) / 2  # 142.5 mm
 PAD = 1.8 * mm
 CUT_TICK = 4 * mm
 CUT_CROSS = 5 * mm
+CUT_INSET = 0.8 * mm
 
 _FONT_REGISTERED = False
 FONT_NAME = "AppSans"
@@ -275,7 +279,8 @@ def _draw_back(pdf: canvas.Canvas, ox: float, oy: float) -> None:
         "№ аптеки, адрес, дата реализации и подпись фармацевтического работника",
     ]
 
-    h1, h2, h3, h4, h5 = 14 * mm, 9 * mm, 12 * mm, 13 * mm, 10 * mm
+    # Высоты строк как в print_blank.css / preview (последняя — остаток)
+    h1, h2, h3, h4, h5 = 14 * mm, 9 * mm, 13 * mm, 14 * mm, 10 * mm
     fixed = h1 + h2 + h3 + h4 + h5
     h6 = height - fixed
     if h6 < 28 * mm:
@@ -336,9 +341,11 @@ def _draw_back(pdf: canvas.Canvas, ox: float, oy: float) -> None:
 
 def _blank_origins() -> list[tuple[float, float]]:
     """
-    4 бланка на A4 (2x2) с полями от края и зазором между бланками:
+    4 бланка на A4 (2x2) с равными полями после разреза по центру:
       [0][1]
       [2][3]
+    PAGE_MARGIN == GUTTER/2, поэтому у каждого куска отступ одинаков
+    с внешнего края и со стороны реза — лицевая и оборот совпадают.
     """
     left_x = PAGE_MARGIN
     right_x = PAGE_MARGIN + FORM_W + GUTTER
@@ -362,10 +369,11 @@ def _draw_cut_guides(pdf: canvas.Canvas) -> None:
     cy = A4_H / 2
 
     # метки на краях листа (в поле)
-    pdf.line(cx, A4_H - 0.8 * mm, cx, A4_H - 0.8 * mm - CUT_TICK)
-    pdf.line(cx, 0.8 * mm, cx, 0.8 * mm + CUT_TICK)
-    pdf.line(0.8 * mm, cy, 0.8 * mm + CUT_TICK, cy)
-    pdf.line(A4_W - 0.8 * mm, cy, A4_W - 0.8 * mm - CUT_TICK, cy)
+    inset = CUT_INSET
+    pdf.line(cx, A4_H - inset, cx, A4_H - inset - CUT_TICK)
+    pdf.line(cx, inset, cx, inset + CUT_TICK)
+    pdf.line(inset, cy, inset + CUT_TICK, cy)
+    pdf.line(A4_W - inset, cy, A4_W - inset - CUT_TICK, cy)
 
     # маленький крестик в центре между бланками
     half = CUT_CROSS / 2
