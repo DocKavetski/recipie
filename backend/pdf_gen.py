@@ -9,9 +9,8 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
-from backend.latin_gen import generate_genitive
-from backend.numbers_ru import number_to_words_ru
 from backend.patient_parse import format_name_with_initials, normalize_birth_date
+from backend.rx_format import format_rp_lines
 from backend.validate import chunk_drugs, duplex_back_index
 
 
@@ -74,12 +73,6 @@ def _today_text() -> str:
     ]
     now = datetime.now()
     return f"{now.day} {months[now.month]} {now.year} г."
-
-
-def _drug_title(drug: dict[str, Any]) -> str:
-    if drug.get("mode") == "trade" and drug.get("selectedTrade"):
-        return str(drug["selectedTrade"])
-    return generate_genitive(drug.get("latin_name", ""))
 
 
 def _wrap(pdf: canvas.Canvas, text: str, font: str, size: float, max_width: float) -> list[str]:
@@ -219,14 +212,7 @@ def _draw_front(
         pdf.setFont(FONT_NAME, 10)
         pdf.drawCentredString(left + c1 / 2, y + row_h / 2 - 3, "Rp:")
         if drug:
-            title = _drug_title(drug)
-            rp = f"{drug.get('drug_form', '')} {title} {drug.get('dosage', '')}".strip()
-            qty = drug.get("dispenseQty", "")
-            lines = [
-                rp,
-                f"D.t.d. № {qty} ({number_to_words_ru(qty)})",
-                f"S.: {drug.get('selectedScheme', '')}",
-            ]
+            lines = format_rp_lines(drug)
             cursor = y + row_h - 1.5 * mm
             for i, line in enumerate(lines):
                 size = 8.5 if i == 0 else 7.5

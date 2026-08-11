@@ -170,15 +170,29 @@ function openPrintPreview(state) {
         return value;
     }
 
+    function formInPhrase(drugForm) {
+        const raw = String(drugForm || "").trim().toLowerCase().replace(/\.$/, "");
+        if (raw === "tab" || raw === "") return "in tab.";
+        if (raw === "caps") return "in caps.";
+        if (raw === "sol") return "in sol.";
+        if (raw === "sir") return "in sir.";
+        return `in ${raw}.`;
+    }
+
     function renderDrugCell(drug) {
         if (!drug) {
             return "";
         }
         const title = drug.mode === "trade" ? drug.selectedTrade : latinGenitive(drug.latin_name);
+        const nameLine = [title, drug.dosage].filter(Boolean).join(" ").trim();
+        const qty = drug.dispenseQty;
+        const dtd = `D.t.d. № ${qty} (${numberToWordsRu(qty)}) ${formInPhrase(drug.drug_form)}`;
+        const scheme = String(drug.selectedScheme || "").trim();
+        const sig = scheme ? `S. ${scheme}` : "S.";
         return `
-            <p class="drug">${escapeHtml(drug.drug_form)} ${escapeHtml(title)} ${escapeHtml(drug.dosage)}</p>
-            <p>D.t.d. № ${escapeHtml(drug.dispenseQty)} (${escapeHtml(numberToWordsRu(drug.dispenseQty))})</p>
-            <p class="sig-small">S.: ${escapeHtml(drug.selectedScheme || "")}</p>
+            <p class="drug">${escapeHtml(nameLine)}</p>
+            <p>${escapeHtml(dtd)}</p>
+            <p class="sig-small">${escapeHtml(sig)}</p>
         `;
     }
 

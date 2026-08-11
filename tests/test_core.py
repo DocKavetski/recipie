@@ -22,6 +22,7 @@ from backend.validate import (
     normalize_prescription_payload,
     validate_prescription_payload,
 )
+from backend.rx_format import form_in_phrase, format_rp_lines
 
 
 class TestNormalizeBirthDate:
@@ -246,6 +247,45 @@ class TestChunkAndDuplex:
         assert duplex_back_index(1) == 0
         assert duplex_back_index(2) == 3
         assert duplex_back_index(3) == 2
+
+
+class TestRpFormat:
+    def test_form_in_phrase(self):
+        assert form_in_phrase("Tab.") == "in tab."
+        assert form_in_phrase("Caps.") == "in caps."
+        assert form_in_phrase("Sol.") == "in sol."
+        assert form_in_phrase("") == "in tab."
+
+    def test_format_rp_lines_mnn(self):
+        lines = format_rp_lines(
+            {
+                "mode": "mnn",
+                "latin_name": "Escitalopramum",
+                "dosage": "10 мг",
+                "drug_form": "Tab.",
+                "dispenseQty": 30,
+                "selectedScheme": "по 1 таблетке утром",
+            }
+        )
+        assert lines[0] == "Escitaloprami 10 мг"
+        assert lines[1].startswith("D.t.d. № 30 (")
+        assert lines[1].endswith("in tab.")
+        assert lines[2] == "S. по 1 таблетке утром"
+
+    def test_format_rp_lines_caps_trade(self):
+        lines = format_rp_lines(
+            {
+                "mode": "trade",
+                "selectedTrade": "Fluoxetine-Teva",
+                "dosage": "20 мг",
+                "drug_form": "Caps.",
+                "dispenseQty": 28,
+                "selectedScheme": "по 1 капсуле утром",
+            }
+        )
+        assert lines[0] == "Fluoxetine-Teva 20 мг"
+        assert "in caps." in lines[1]
+        assert lines[2] == "S. по 1 капсуле утром"
 
 
 class TestPrintGeometry:
