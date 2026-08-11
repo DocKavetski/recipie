@@ -1,0 +1,182 @@
+[
+  {
+    "category": "atypical antidepressant",
+    "mnn": "Tianeptine",
+    "russian_name": "Тианептин",
+    "latin_name": "Tianeptinum",
+    "drug_form": "Tab.",
+    "dosage": "12.5 мг",
+    "packaging": "N30",
+    "trade_names": [
+      "Коаксил"
+    ],
+    "search_aliases": [
+      "тианептин",
+      "tianeptine",
+      "коаксил"
+    ],
+    "scheme_options": [],
+    "sources": [
+      "curated_list",
+      "manual_fallback"
+    ],
+    "form_options": [
+      "Tab."
+    ],
+    "dosage_options": [
+      "12.5 мг"
+    ],
+    "form_dosage_map": {
+      "Tab.": [
+        "12.5 мг"
+      ]
+    },
+    "archived": true,
+    "archive_reason": "Нет в продаже на tabletka.by (Беларусь)"
+  },
+  {
+    "category": "atypical antidepressant",
+    "mnn": "Agomelatine",
+    "russian_name": "Агомелатин",
+    "latin_name": "Agomelatini",
+    "drug_form": "Tab.",
+    "dosage": "25 мг",
+    "packaging": "N30",
+    "trade_names": [
+      "Валдоксан"
+    ],
+    "search_aliases": [
+      "агомелатин",
+      "agomelatine",
+      "валдоксан"
+    ],
+    "scheme_options": [],
+    "sources": [
+      "curated_list",
+      "manual_fallback"
+    ],
+    "form_options": [
+      "Tab."
+    ],
+    "dosage_options": [
+      "25 мг"
+    ],
+    "form_dosage_map": {
+      "Tab.": [
+        "25 мг"
+      ]
+    },
+    "archived": true,
+    "archive_reason": "Нет в продаже на tabletka.by (Беларусь)"
+  },
+  {
+    "category": "anxiolytic",
+    "mnn": "Hydroxyzine",
+    "russian_name": "Гидроксизин",
+    "latin_name": "Hydroxyzinum",
+    "drug_form": "Tab.",
+    "dosage": "25 мг",
+    "packaging": "N30",
+    "trade_names": [
+      "Атаракс"
+    ],
+    "search_aliases": [
+      "гидроксизин",
+      "hydroxyzine",
+      "атаракс"
+    ],
+    "scheme_options": [],
+    "sources": [
+      "curated_list",
+      "manual_fallback"
+    ],
+    "form_options": [
+      "Tab.",
+      "Sol."
+    ],
+    "dosage_options": [
+      "25 мг"
+    ],
+    "form_dosage_map": {
+      "Tab.": [
+        "25 мг"
+      ],
+      "Sol.": [
+        "2 мг/мл"
+      ]
+    },
+    "archived": true,
+    "archive_reason": "Нет в продаже на tabletka.by (Беларусь)"
+  },
+  {
+    "category": "anxiolytic",
+    "mnn": "Etifoxine",
+    "russian_name": "Этифоксин",
+    "latin_name": "Etifoxinum",
+    "drug_form": "Caps.",
+    "dosage": "50 мг",
+    "packaging": "N30",
+    "trade_names": [
+      "Стресам"
+    ],
+    "search_aliases": [
+      "этифоксин",
+      "etifoxine",
+      "стресам"
+    ],
+    "scheme_options": [],
+    "sources": [
+      "curated_list",
+      "manual_fallback"
+    ],
+    "form_options": [
+      "Caps."
+    ],
+    "dosage_options": [
+      "50 мг"
+    ],
+    "form_dosage_map": {
+      "Caps.": [
+        "50 мг"
+      ]
+    },
+    "archived": true,
+    "archive_reason": "Нет в продаже на tabletka.by (Беларусь)"
+  },
+  {
+    "category": "SSRI antidepressant",
+    "mnn": "Vilazodone",
+    "russian_name": "Вилазодон",
+    "latin_name": "Vilazodonum",
+    "drug_form": "Tab.",
+    "dosage": "20 мг",
+    "packaging": "N30",
+    "trade_names": [],
+    "search_aliases": [
+      "вилазодон",
+      "vilazodone"
+    ],
+    "scheme_options": [],
+    "sources": [
+      "curated_list",
+      "manual_fallback"
+    ],
+    "form_options": [
+      "Tab."
+    ],
+    "dosage_options": [
+      "10 мг",
+      "20 мг",
+      "40 мг"
+    ],
+    "form_dosage_map": {
+      "Tab.": [
+        "10 мг",
+        "20 мг",
+        "40 мг"
+      ]
+    },
+    "archived": true,
+    "archive_reason": "Нет в продаже на tabletka.by (Беларусь)"
+  }
+]

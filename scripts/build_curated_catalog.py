@@ -29,10 +29,8 @@ CURATED: list[tuple[str, str, str, str, list[str]]] = [
     ("Дулоксетин", "Duloxetine", "Duloxetinum", "SNRI antidepressant", []),
     ("Кломипрамин", "Clomipramine", "Clomipraminum", "tricyclic antidepressant", []),
     ("Амитриптилин", "Amitriptyline", "Amitriptylinum", "tricyclic antidepressant", []),
-    ("Тианептин", "Tianeptine", "Tianeptinum", "atypical antidepressant", ["Коаксил"]),
     ("Мапротилин", "Maprotiline", "Maprotilinum", "tetracyclic antidepressant", []),
     ("Миртазапин", "Mirtazapine", "Mirtazapinum", "atypical antidepressant", []),
-    ("Агомелатин", "Agomelatine", "Agomelatini", "atypical antidepressant", ["Валдоксан"]),
     ("Прегабалин", "Pregabalin", "Pregabalinum", "anxiolytic", ["Лирика"]),
     ("Габапентин", "Gabapentin", "Gabapentinum", "anticonvulsant", []),
     ("Карбамазепин", "Carbamazepine", "Carbamazepinum", "mood stabilizer", []),
@@ -53,65 +51,19 @@ CURATED: list[tuple[str, str, str, str, list[str]]] = [
     ("Бисопролол", "Bisoprolol", "Bisoprololum", "beta blocker", []),
     ("Пропранолол", "Propranolol", "Propranololum", "beta blocker", []),
     ("Атенолол", "Atenolol", "Atenololum", "beta blocker", []),
-    ("Гидроксизин", "Hydroxyzine", "Hydroxyzinum", "anxiolytic", ["Атаракс"]),
     ("Буспирон", "Buspirone", "Buspironum", "anxiolytic", []),
-    ("Этифоксин", "Etifoxine", "Etifoxinum", "anxiolytic", ["Стресам"]),
+    ("Тофизопам", "Tofisopam", "Tofisopamum", "anxiolytic", ["Грандаксин", "Grandaxin"]),
     ("Зопиклон", "Zopiclone", "Zopiclonum", "hypnotic", ["Имован"]),
-    ("Фенибут", "Phenibut", "Acidum aminophenylbutyricum", "anxiolytic", ["Анvifen"]),
+    ("Фенибут", "Phenibut", "Acidum aminophenylbutyricum", "anxiolytic", ["Анвифен"]),
     ("Мелатонин", "Melatonin", "Melatoninum", "hypnotic", []),
     ("Карбонат лития", "Lithium carbonate", "Lithium carbonicum", "mood stabilizer", []),
-    ("Вилазодон", "Vilazodone", "Vilazodonum", "SSRI antidepressant", []),
 ]
 
+# Нет в продаже в РБ (tabletka.by) — хранятся в data/archived_drugs.json, не в CURATED.
+# Тианептин/Коаксил, Агомелатин/Валдоксан, Гидроксизин/Атаракс, Этифоксин/Стресам, Вилазодон.
 
-# tabletka.by не всегда находит эти МНН — заполняем вручную.
-MANUAL_FALLBACKS: dict[str, dict] = {
-    "Tianeptine": {
-        "drug_form": "Tab.",
-        "dosage": "12.5 мг",
-        "packaging": "N30",
-        "form_options": ["Tab."],
-        "dosage_options": ["12.5 мг"],
-        "form_dosage_map": {"Tab.": ["12.5 мг"]},
-        "trade_names": ["Коаксил"],
-    },
-    "Agomelatine": {
-        "drug_form": "Tab.",
-        "dosage": "25 мг",
-        "packaging": "N30",
-        "form_options": ["Tab."],
-        "dosage_options": ["25 мг"],
-        "form_dosage_map": {"Tab.": ["25 мг"]},
-        "trade_names": ["Валдоксан"],
-    },
-    "Hydroxyzine": {
-        "drug_form": "Tab.",
-        "dosage": "25 мг",
-        "packaging": "N30",
-        "form_options": ["Tab.", "Sol."],
-        "dosage_options": ["25 мг"],
-        "form_dosage_map": {"Tab.": ["25 мг"], "Sol.": ["2 мг/мл"]},
-        "trade_names": ["Атаракс"],
-    },
-    "Etifoxine": {
-        "drug_form": "Caps.",
-        "dosage": "50 мг",
-        "packaging": "N30",
-        "form_options": ["Caps."],
-        "dosage_options": ["50 мг"],
-        "form_dosage_map": {"Caps.": ["50 мг"]},
-        "trade_names": ["Стресам"],
-    },
-    "Vilazodone": {
-        "drug_form": "Tab.",
-        "dosage": "20 мг",
-        "packaging": "N30",
-        "form_options": ["Tab."],
-        "dosage_options": ["10 мг", "20 мг", "40 мг"],
-        "form_dosage_map": {"Tab.": ["10 мг", "20 мг", "40 мг"]},
-        "trade_names": [],
-    },
-}
+# tabletka.by не всегда находит эти МНН — заполняем вручную (только для активных).
+MANUAL_FALLBACKS: dict[str, dict] = {}
 
 
 def _apply_manual_fallback(item: dict, mnn: str) -> bool:

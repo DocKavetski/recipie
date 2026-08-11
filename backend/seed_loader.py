@@ -163,6 +163,8 @@ def _normalize_form_dosage_map(
 
 
 def normalize_seed_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    if item.get("archived"):
+        return None
     if _is_benzo(item):
         return None
 

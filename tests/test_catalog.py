@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from backend.db import DrugRepository
@@ -28,12 +29,27 @@ def test_list_drugs_not_empty(tmp_path: Path):
     repo = DrugRepository(tmp_path / "app.db")
     repo.initialize()
     drugs = repo.list_drugs()
-    assert len(drugs) >= 40
+    assert len(drugs) >= 35
     names = " ".join(d["russian_name"].lower() for d in drugs)
     assert "диазепам" not in names
     assert "эсциталопрам" in names
     assert "тофизопам" in names
+    assert "вилазодон" not in names
+    assert "тианептин" not in names
+    assert "агомелатин" not in names
+    assert "этифоксин" not in names
+    assert "гидроксизин" not in names
 
+
+def test_archived_unavailable_drugs_file():
+    archived = json.loads(Path("data/archived_drugs.json").read_text(encoding="utf-8"))
+    assert len(archived) >= 5
+    mnns = {item["mnn"] for item in archived}
+    assert {"Tianeptine", "Agomelatine", "Etifoxine", "Hydroxyzine", "Vilazodone"} <= mnns
+    assert all(item.get("archived") for item in archived)
+    # Архив не попадает в активный seed
+    active = {item["mnn"] for item in load_seed_drugs()}
+    assert mnns.isdisjoint(active)
 
 def test_catalog_includes_grandaxin(tmp_path: Path):
     repo = DrugRepository(tmp_path / "app.db")
