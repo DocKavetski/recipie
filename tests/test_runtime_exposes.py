@@ -24,6 +24,9 @@ def test_initialize_registers_parse_treatment(tmp_path: Path, monkeypatch):
     repo.initialize()
 
     assert "parse_treatment" in exposed
+    assert "get_archived_drugs" in exposed
     result = exposed["parse_treatment"]("Эсциталопрам 10 мг утром")
     assert result["ok"] is True
     assert result["drugs"][0]["mnn"] == "Escitalopram"
+    archived = exposed["get_archived_drugs"]()
+    assert any(item["mnn"] == "Vilazodone" for item in archived)

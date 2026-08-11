@@ -23,6 +23,7 @@ from backend.pdf_gen import generate_prescription_pdf
 from backend.print_preview import build_preview_context
 from backend.runtime_control import build_restart_command, hard_exit, spawn_restart
 from backend.settings import SettingsStore
+from backend.seed_loader import load_archived_drugs
 from backend.tabletka import availability_to_dict, check_availability_minsk, search_tabletka
 from backend.treatment_parse import parse_treatment_text
 from backend.updater import apply_update, cleanup_update_artifacts, get_update_status, open_repo_in_browser
@@ -129,6 +130,11 @@ def get_default_stamp():
 @eel.expose
 def get_catalog_drugs():
     return REPOSITORY.list_drugs()
+
+
+@eel.expose
+def get_archived_drugs():
+    return load_archived_drugs()
 
 
 @eel.expose

@@ -238,6 +238,19 @@ body {
     background: #f7fafc;
 }
 
+.directory-archive {
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+}
+
+.directory-archive-table {
+    opacity: 0.92;
+}
+
+.directory-archive-row td {
+    color: var(--muted);
+}
+
 .drugs-empty.is-visible {
     display: block;
 }

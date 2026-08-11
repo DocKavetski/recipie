@@ -4844,5 +4844,185 @@
         }
       ]
     }
+  },
+  {
+    "category": "ADHD",
+    "mnn": "Atomoxetine",
+    "russian_name": "Атомоксетин",
+    "latin_name": "Atomoxetinum",
+    "sources": [
+      "curated_list"
+    ],
+    "scheme_options": [],
+    "search_aliases": [
+      "атомоксетин",
+      "atomoxetine",
+      "страттера",
+      "strattera"
+    ],
+    "drug_form": "Caps.",
+    "dosage": "18 мг",
+    "packaging": "N28",
+    "form_options": [
+      "Caps."
+    ],
+    "dosage_options": [
+      "10 мг",
+      "18 мг",
+      "25 мг",
+      "40 мг",
+      "60 мг"
+    ],
+    "form_dosage_map": {
+      "Caps.": [
+        "10 мг",
+        "18 мг",
+        "25 мг",
+        "40 мг",
+        "60 мг"
+      ]
+    },
+    "trade_names": [
+      "Атомоксетин",
+      "Атомоксетин Генерис",
+      "Атомоксетин Канон"
+    ],
+    "trade_details": {
+      "Атомоксетин": {
+        "packaging": "N28",
+        "dispense_qty": 28,
+        "form": "Caps.",
+        "dosage": "10 мг"
+      },
+      "Атомоксетин Генерис": {
+        "packaging": "N28",
+        "dispense_qty": 28,
+        "form": "Caps.",
+        "dosage": "25 мг"
+      },
+      "Атомоксетин Канон": {
+        "packaging": "N7",
+        "dispense_qty": 7,
+        "form": "Caps.",
+        "dosage": "18 мг"
+      }
+    },
+    "tabletka": {
+      "mnn_id": "1998",
+      "mnn_text": "Атомоксетин",
+      "variants_count": 11,
+      "variants": [
+        {
+          "trade_name": "Атомоксетин",
+          "form_raw": "капсулы 18мг N28",
+          "drug_form": "Caps.",
+          "dosage": "18 мг",
+          "packaging": "N28",
+          "dispense_qty": 28,
+          "ls": "31376",
+          "producer": "Ауробиндо Фарма Лтд"
+        },
+        {
+          "trade_name": "Атомоксетин",
+          "form_raw": "капсулы 25мг N28",
+          "drug_form": "Caps.",
+          "dosage": "25 мг",
+          "packaging": "N28",
+          "dispense_qty": 28,
+          "ls": "31381",
+          "producer": "Ауробиндо Фарма Лтд"
+        },
+        {
+          "trade_name": "Атомоксетин",
+          "form_raw": "капсулы 60мг N28",
+          "drug_form": "Caps.",
+          "dosage": "60 мг",
+          "packaging": "N28",
+          "dispense_qty": 28,
+          "ls": "31390",
+          "producer": "Ауробиндо Фарма Лтд"
+        },
+        {
+          "trade_name": "Атомоксетин",
+          "form_raw": "капсулы 10мг N28",
+          "drug_form": "Caps.",
+          "dosage": "10 мг",
+          "packaging": "N28",
+          "dispense_qty": 28,
+          "ls": "31448",
+          "producer": "Ауробиндо Фарма Лтд"
+        },
+        {
+          "trade_name": "Атомоксетин Генерис",
+          "form_raw": "капсулы 25мг N28",
+          "drug_form": "Caps.",
+          "dosage": "25 мг",
+          "packaging": "N28",
+          "dispense_qty": 28,
+          "ls": "30605",
+          "producer": "Ауробиндо Фарма Лтд"
+        },
+        {
+          "trade_name": "Атомоксетин Генерис",
+          "form_raw": "капсулы 10мг N7",
+          "drug_form": "Caps.",
+          "dosage": "10 мг",
+          "packaging": "N7",
+          "dispense_qty": 7,
+          "ls": "30854",
+          "producer": "Ауробиндо Фарма Лтд"
+        },
+        {
+          "trade_name": "Атомоксетин Канон",
+          "form_raw": "капсулы 10мг N7",
+          "drug_form": "Caps.",
+          "dosage": "10 мг",
+          "packaging": "N7",
+          "dispense_qty": 7,
+          "ls": "30455",
+          "producer": "Канонфарма продакшн ЗАО"
+        },
+        {
+          "trade_name": "Атомоксетин Канон",
+          "form_raw": "капсулы 25мг N7",
+          "drug_form": "Caps.",
+          "dosage": "25 мг",
+          "packaging": "N7",
+          "dispense_qty": 7,
+          "ls": "30456",
+          "producer": "Канонфарма продакшн ЗАО"
+        },
+        {
+          "trade_name": "Атомоксетин Канон",
+          "form_raw": "капсулы 60мг N7",
+          "drug_form": "Caps.",
+          "dosage": "60 мг",
+          "packaging": "N7",
+          "dispense_qty": 7,
+          "ls": "30457",
+          "producer": "Канонфарма продакшн ЗАО"
+        },
+        {
+          "trade_name": "Атомоксетин Канон",
+          "form_raw": "капсулы 40мг N7",
+          "drug_form": "Caps.",
+          "dosage": "40 мг",
+          "packaging": "N7",
+          "dispense_qty": 7,
+          "ls": "30579",
+          "producer": "Канонфарма продакшн ЗАО"
+        },
+        {
+          "trade_name": "Атомоксетин Канон",
+          "form_raw": "капсулы 18мг N7",
+          "drug_form": "Caps.",
+          "dosage": "18 мг",
+          "packaging": "N7",
+          "dispense_qty": 7,
+          "ls": "30581",
+          "producer": "Канонфарма продакшн ЗАО"
+        }
+      ]
+    }
   }
 ]

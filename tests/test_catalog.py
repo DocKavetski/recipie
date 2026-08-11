@@ -63,6 +63,29 @@ def test_catalog_includes_grandaxin(tmp_path: Path):
     assert "Tab." in drug["form_options"]
 
 
+def test_catalog_includes_atomoxetine(tmp_path: Path):
+    repo = DrugRepository(tmp_path / "app.db")
+    repo.initialize()
+    results = repo.search_drugs("атомоксетин")
+    assert results
+    assert any(item["mnn"] == "Atomoxetine" for item in results)
+    by_trade = repo.search_drugs("страттера")
+    assert any(item["mnn"] == "Atomoxetine" for item in by_trade)
+    drug = next(item for item in repo.list_drugs() if item["mnn"] == "Atomoxetine")
+    assert drug["drug_form"] == "Caps."
+    assert "18 мг" in drug["dosage_options"]
+
+
+def test_load_archived_drugs_for_directory():
+    from backend.seed_loader import load_archived_drugs
+
+    archived = load_archived_drugs()
+    assert len(archived) >= 5
+    assert all(item.get("archived") for item in archived)
+    assert any(item["mnn"] == "Vilazodone" for item in archived)
+    assert any("Нет в продаже" in item.get("archive_reason", "") for item in archived)
+
+
 def test_catalog_excludes_solution_form():
     drugs = load_seed_drugs()
     for drug in drugs:

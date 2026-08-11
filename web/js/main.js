@@ -6,6 +6,7 @@ const birthDateInput = document.getElementById("birthDate");
 const ageValue = document.getElementById("ageValue");
 const statusText = document.getElementById("statusText");
 const directoryTableBody = document.getElementById("directoryTableBody");
+const directoryArchiveBody = document.getElementById("directoryArchiveBody");
 const recipeDoctorInput = document.getElementById("recipeDoctorInput");
 const settingsDoctorInput = document.getElementById("settingsDoctorInput");
 const doctorModalInput = document.getElementById("doctorModalInput");
@@ -935,6 +936,50 @@ function renderDirectoryTable() {
             <td>${escapeHtml((drug.trade_names || []).join(", "))}</td>
         `;
         directoryTableBody.appendChild(row);
+    }
+}
+
+function renderDirectoryArchive(drugs) {
+    if (!directoryArchiveBody) {
+        return;
+    }
+    directoryArchiveBody.innerHTML = "";
+    const rows = Array.isArray(drugs) ? drugs : [];
+    if (!rows.length) {
+        directoryArchiveBody.innerHTML = `<tr><td colspan="8" class="text-muted">Архив пуст</td></tr>`;
+        return;
+    }
+    for (const drug of rows) {
+        const row = document.createElement("tr");
+        row.className = "directory-archive-row";
+        row.innerHTML = `
+            <td>${escapeHtml(drug.category)}</td>
+            <td>${escapeHtml(drug.mnn)}</td>
+            <td>${escapeHtml(drug.russian_name)}</td>
+            <td>${escapeHtml(drug.latin_name)}</td>
+            <td>${escapeHtml((drug.form_options || [drug.drug_form]).join(", "))}</td>
+            <td>${escapeHtml((drug.dosage_options || [drug.dosage]).join(", "))}</td>
+            <td>${escapeHtml((drug.trade_names || []).join(", "))}</td>
+            <td>${escapeHtml(drug.archive_reason || "Архив")}</td>
+        `;
+        directoryArchiveBody.appendChild(row);
+    }
+}
+
+async function loadArchivedDrugsFromBackend() {
+    if (!directoryArchiveBody) {
+        return;
+    }
+    if (!window.eel || typeof window.eel.get_archived_drugs !== "function") {
+        directoryArchiveBody.innerHTML = `<tr><td colspan="8" class="text-muted">Архив недоступен в этой версии backend</td></tr>`;
+        return;
+    }
+    try {
+        const archived = await window.eel.get_archived_drugs()();
+        renderDirectoryArchive(archived);
+    } catch (error) {
+        console.error(error);
+        directoryArchiveBody.innerHTML = `<tr><td colspan="8" class="text-muted">Не удалось загрузить архив</td></tr>`;
     }
 }
 
@@ -2308,6 +2353,7 @@ async function initPrototype() {
     await bindTemplateManagerControls();
     await renderTemplateManagerPreview("");
     renderDirectoryTable();
+    await loadArchivedDrugsFromBackend();
     const startupUpdateStatus = await refreshUpdateStatus({ silent: true });
     await maybeAutoApplyStartupUpdate(startupUpdateStatus);
 

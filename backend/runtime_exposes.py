@@ -24,11 +24,16 @@ def register_repository_exposes(repository: Any) -> None:
     except Exception:  # noqa: BLE001
         return
 
+    from backend.seed_loader import load_archived_drugs
     from backend.treatment_parse import parse_treatment_text
 
     @eel.expose
     def parse_treatment(text):
         return parse_treatment_text(text or "", repository.list_drugs())
 
+    @eel.expose
+    def get_archived_drugs():
+        return load_archived_drugs()
+
     _REGISTERED = True
-    LOGGER.info("Registered runtime Eel exposes: parse_treatment")
+    LOGGER.info("Registered runtime Eel exposes: parse_treatment, get_archived_drugs")

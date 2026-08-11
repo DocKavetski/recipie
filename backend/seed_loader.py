@@ -248,3 +248,60 @@ def load_seed_drugs(path: Path | None = None) -> list[dict[str, Any]]:
         seen.add(key)
         drugs.append(normalized)
     return drugs
+
+
+def _archived_seed_candidates(path: Path | None = None) -> list[Path]:
+    import sys
+
+    candidates: list[Path] = []
+    if path is not None:
+        candidates.append(Path(path))
+    root = Path(__file__).resolve().parents[1]
+    candidates.append(root / "data" / "archived_drugs.json")
+    if getattr(sys, "frozen", False):
+        meipass = Path(getattr(sys, "_MEIPASS", root))
+        candidates.append(meipass / "data" / "archived_drugs.json")
+        candidates.append(Path(sys.executable).resolve().parent / "data" / "archived_drugs.json")
+    return candidates
+
+
+def load_archived_drugs(path: Path | None = None) -> list[dict[str, Any]]:
+    """Препараты вне продажи — только для просмотра в справочнике."""
+    candidates = _archived_seed_candidates(path)
+    archive_path = next((candidate for candidate in candidates if candidate.exists()), None)
+    if archive_path is None:
+        return []
+
+    raw = json.loads(archive_path.read_text(encoding="utf-8"))
+    drugs: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw:
+        payload = dict(item or {})
+        payload["archived"] = True
+        # Не через normalize_seed_item: archived там отсекается.
+        russian = str(payload.get("russian_name") or "").strip()
+        mnn = str(payload.get("mnn") or "").strip()
+        if not russian or not mnn:
+            continue
+        key = mnn.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        drugs.append(
+            {
+                "category": _normalize_category(payload.get("category", "")),
+                "mnn": mnn,
+                "russian_name": russian,
+                "latin_name": str(payload.get("latin_name") or "").strip(),
+                "drug_form": str(payload.get("drug_form") or "Tab.").strip() or "Tab.",
+                "dosage": str(payload.get("dosage") or "").strip(),
+                "packaging": str(payload.get("packaging") or "").strip(),
+                "form_options": list(payload.get("form_options") or ([payload.get("drug_form")] if payload.get("drug_form") else ["Tab."])),
+                "dosage_options": list(payload.get("dosage_options") or ([payload.get("dosage")] if payload.get("dosage") else [])),
+                "trade_names": [str(x).strip() for x in (payload.get("trade_names") or []) if str(x).strip()],
+                "archived": True,
+                "archive_reason": str(payload.get("archive_reason") or "Архив").strip(),
+            }
+        )
+    drugs.sort(key=lambda item: (item.get("category") or "", item.get("russian_name") or ""))
+    return drugs

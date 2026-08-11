@@ -53,6 +53,7 @@ CURATED: list[tuple[str, str, str, str, list[str]]] = [
     ("Атенолол", "Atenolol", "Atenololum", "beta blocker", []),
     ("Буспирон", "Buspirone", "Buspironum", "anxiolytic", []),
     ("Тофизопам", "Tofisopam", "Tofisopamum", "anxiolytic", ["Грандаксин", "Grandaxin"]),
+    ("Атомоксетин", "Atomoxetine", "Atomoxetinum", "ADHD", ["Страттера", "Strattera"]),
     ("Зопиклон", "Zopiclone", "Zopiclonum", "hypnotic", ["Имован"]),
     ("Фенибут", "Phenibut", "Acidum aminophenylbutyricum", "anxiolytic", ["Анвифен"]),
     ("Мелатонин", "Melatonin", "Melatoninum", "hypnotic", []),

@@ -18,6 +18,7 @@ python -m PyInstaller `
   --name $name `
   --add-data "web;web" `
   --add-data "data/seed_drugs_from_protocols.json;data" `
+  --add-data "data/archived_drugs.json;data" `
   --add-data "VERSION;." `
   --hidden-import bottle `
   --hidden-import bottle_websocket `
@@ -29,6 +30,7 @@ python -m PyInstaller `
 # Keep local runtime data folder (empty-ish) next to exe
 New-Item -ItemType Directory -Force -Path "dist\$name\data" | Out-Null
 Copy-Item "data\seed_drugs_from_protocols.json" "dist\$name\data\" -Force
+Copy-Item "data\archived_drugs.json" "dist\$name\data\" -Force
 Copy-Item "VERSION" "dist\$name\" -Force
 
 # Zip for GitHub Release
