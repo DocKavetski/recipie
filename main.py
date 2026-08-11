@@ -2,6 +2,18 @@ import logging
 import sys
 from pathlib import Path
 
+
+def _bootstrap_frozen_overrides() -> None:
+    """Для portable: свежие backend/web рядом с exe перекрывают встроенные в сборку."""
+    if not getattr(sys, "frozen", False):
+        return
+    root = Path(sys.executable).resolve().parent
+    if (root / "backend").is_dir():
+        sys.path.insert(0, str(root))
+
+
+_bootstrap_frozen_overrides()
+
 import eel
 
 from backend.db import DrugRepository
@@ -9,12 +21,16 @@ from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
 from backend.pdf_gen import generate_prescription_pdf
 from backend.settings import SettingsStore
 from backend.tabletka import availability_to_dict, check_availability_minsk, search_tabletka
-from backend.updater import apply_update, get_update_status, open_repo_in_browser
+from backend.updater import apply_update, cleanup_update_artifacts, get_update_status, open_repo_in_browser
 from backend.validate import normalize_prescription_payload, validate_prescription_payload
 from backend.version import APP_VERSION, GITHUB_URL
 
 
 def resource_path(*parts: str) -> Path:
+    if getattr(sys, "frozen", False):
+        external = Path(sys.executable).resolve().parent.joinpath(*parts)
+        if external.exists():
+            return external
     base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return base_path.joinpath(*parts)
 
@@ -212,6 +228,7 @@ def print_prescription(payload):
 
 def main() -> None:
     setup_logging()
+    cleanup_update_artifacts()
     REPOSITORY.initialize()
     SETTINGS.load()
     web_dir = resource_path("web")

@@ -38,6 +38,12 @@ CODE_FILES = (
     "README.md",
     ".gitignore",
 )
+# В portable-сборке exe занят процессом — его не перезаписываем из zip-ветки.
+SKIP_REPLACE_NAMES = {
+    "recepty.exe",
+    "recepty.exe.old",
+    "recepty.exe.new",
+}
 
 
 def app_root() -> Path:
@@ -234,13 +240,19 @@ def _friendly_update_error(exc: Exception) -> str:
             "Репозиторий недоступен (проверьте, что он публичный): "
             f"{GITHUB_URL}"
         )
+    if "permission denied" in lowered or "errno 13" in lowered:
+        return (
+            "Нет доступа к файлам установки (часто занят Recepty.exe). "
+            "Закройте программу, замените папку из свежего архива вручную "
+            f"или повторите обновление после перезапуска. ({exc})"
+        )
     return f"Не удалось проверить обновления: {exc}"
 
 
 def get_update_status() -> dict[str, Any]:
     local_version = read_local_version()
     local_sha = local_commit_sha()
-    mode = "git" if is_git_checkout() else ("release" if is_frozen() else "zip")
+    mode = "git" if is_git_checkout() else ("frozen-overlay" if is_frozen() else "zip")
     status: dict[str, Any] = {
         "ok": True,
         "app_version": local_version,
@@ -275,9 +287,10 @@ def get_update_status() -> dict[str, Any]:
     release = latest_release_asset()
     if release:
         status["release_asset"] = release
+        # Для frozen версию берём из ветки/VERSION: overlay обновляет код без замены exe.
+        # Тег релиза показываем только как доп. информацию.
         if release.get("tag") and release["tag"] != local_version:
-            # Для сборки предпочтительнее версия релиза
-            if is_frozen() or not is_git_checkout():
+            if not is_frozen() and not is_git_checkout():
                 remote_version = release["tag"]
                 status["remote_version"] = remote_version
 
@@ -297,6 +310,48 @@ def get_update_status() -> dict[str, Any]:
     return status
 
 
+def cleanup_update_artifacts(root: Path | None = None) -> None:
+    """Удаляет *.old после успешного перезапуска."""
+    base = root or app_root()
+    for path in base.glob("*.old"):
+        try:
+            path.unlink()
+        except OSError as exc:
+            LOGGER.info("skip cleanup %s: %s", path, exc)
+
+
+def _safe_copy2(src: Path, dst: Path) -> None:
+    """Копирует файл; на Windows умеет обойти занятый exe через rename → .old."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(src, dst)
+        return
+    except PermissionError:
+        if os.name != "nt":
+            raise
+        pending = dst.with_name(dst.name + ".new")
+        old = dst.with_name(dst.name + ".old")
+        try:
+            if pending.exists():
+                pending.unlink()
+            shutil.copy2(src, pending)
+            if old.exists():
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+            # Запущенный exe на Windows обычно можно переименовать.
+            dst.rename(old)
+            pending.rename(dst)
+            return
+        except OSError as exc:
+            raise PermissionError(
+                f"Не удалось заменить занятый файл «{dst.name}». "
+                "Закройте Recepty и повторите обновление, либо скопируйте "
+                f"«{pending.name}» вручную поверх «{dst.name}». ({exc})"
+            ) from exc
+
+
 def _copy_tree(src: Path, dst: Path) -> None:
     if dst.exists():
         shutil.rmtree(dst)
@@ -313,12 +368,12 @@ def _apply_source_tree(source_root: Path) -> None:
     for name in CODE_FILES:
         src = source_root / name
         if src.exists():
-            shutil.copy2(src, root / name)
+            _safe_copy2(src, root / name)
 
     seed_src = source_root / "data" / "seed_drugs_from_protocols.json"
     if seed_src.exists():
         (root / "data").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(seed_src, root / "data" / "seed_drugs_from_protocols.json")
+        _safe_copy2(seed_src, root / "data" / "seed_drugs_from_protocols.json")
 
     data_src = source_root / "data"
     if data_src.exists():
@@ -330,7 +385,7 @@ def _apply_source_tree(source_root: Path) -> None:
             if path.name.startswith("tabletka_"):
                 continue
             if path.name.endswith(".json") or path.name.endswith(".txt"):
-                shutil.copy2(path, root / "data" / path.name)
+                _safe_copy2(path, root / "data" / path.name)
 
 
 def _apply_zip_update() -> dict[str, Any]:
@@ -349,7 +404,7 @@ def _apply_zip_update() -> dict[str, Any]:
     return {"method": "zip"}
 
 
-def _apply_release_zip_update(asset: dict[str, Any]) -> dict[str, Any]:
+def _apply_release_zip_update(asset: dict[str, Any], *, replace_exe: bool = False) -> dict[str, Any]:
     url = asset.get("url")
     if not url:
         raise RuntimeError("В релизе нет ссылки на архив.")
@@ -396,21 +451,24 @@ def _apply_release_zip_update(asset: dict[str, Any]) -> dict[str, Any]:
                     if data_item.is_dir():
                         _copy_tree(data_item, dest)
                     else:
-                        shutil.copy2(data_item, dest)
+                        _safe_copy2(data_item, dest)
+                continue
+            if not replace_exe and item.name.lower() in SKIP_REPLACE_NAMES:
+                LOGGER.info("skip locked binary during update: %s", item.name)
                 continue
             if item.is_dir():
                 _copy_tree(item, target)
             else:
-                shutil.copy2(item, target)
+                _safe_copy2(item, target)
 
         if backup.exists():
             (root / "data").mkdir(parents=True, exist_ok=True)
             for name in PROTECTED_DATA:
                 src = backup / name
                 if src.exists():
-                    shutil.copy2(src, root / "data" / name)
+                    _safe_copy2(src, root / "data" / name)
 
-    return {"method": "release-zip", "asset": asset.get("name")}
+    return {"method": "release-zip", "asset": asset.get("name"), "replaced_exe": replace_exe}
 
 
 def _apply_git_update() -> dict[str, Any]:
@@ -441,17 +499,27 @@ def apply_update() -> dict[str, Any]:
     try:
         if is_git_checkout():
             details = _apply_git_update()
+        elif is_frozen():
+            # Portable: не перезаписываем запущенный Recepty.exe.
+            # Кладём свежие backend/web/VERSION рядом с exe (см. bootstrap в main.py).
+            details = _apply_zip_update()
+            details = {**details, "method": "frozen-overlay"}
         elif before.get("release_asset") and before["release_asset"].get("url"):
-            details = _apply_release_zip_update(before["release_asset"])
+            details = _apply_release_zip_update(before["release_asset"], replace_exe=True)
         else:
             details = _apply_zip_update()
     except Exception as exc:  # noqa: BLE001
         LOGGER.exception("apply_update failed")
+        lowered = str(exc).lower()
+        if "permission" in lowered or "errno 13" in lowered:
+            message = _friendly_update_error(exc)
+        else:
+            message = f"Ошибка обновления: {exc}"
         return {
             "ok": False,
             "updated": False,
             "needs_restart": False,
-            "message": f"Ошибка обновления: {exc}",
+            "message": message,
             "status": before,
         }
 
