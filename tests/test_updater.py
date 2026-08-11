@@ -22,6 +22,8 @@ def test_get_update_status_offline(monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("offline")
 
+    monkeypatch.setattr(updater, "is_git_checkout", lambda: True)
+    monkeypatch.setattr(updater, "remote_version_file", lambda: None)
     monkeypatch.setattr(updater, "remote_head_commit", boom)
     status = updater.get_update_status()
     assert status["ok"] is False
@@ -54,6 +56,28 @@ def test_get_update_status_via_git(monkeypatch):
 def test_friendly_permission_error():
     message = updater._friendly_update_error(PermissionError("[Errno 13] Permission denied: 'Recepty.exe'"))
     assert "recepty.exe" in message.lower() or "доступ" in message.lower()
+
+
+def test_friendly_rate_limit_error():
+    message = updater._friendly_update_error(RuntimeError("HTTP Error 403: rate limit exceeded"))
+    assert "rate limit" in message.lower() or "ограничил" in message.lower()
+
+
+def test_get_update_status_without_commit_api_for_non_git(monkeypatch):
+    monkeypatch.setattr(updater, "is_git_checkout", lambda: False)
+    monkeypatch.setattr(updater, "is_frozen", lambda: True)
+    monkeypatch.setattr(updater, "read_local_version", lambda: "1.1.12")
+    monkeypatch.setattr(updater, "remote_version_file", lambda: "1.1.13")
+    monkeypatch.setattr(
+        updater,
+        "remote_head_commit",
+        lambda: (_ for _ in ()).throw(RuntimeError("should not be called")),
+    )
+
+    status = updater.get_update_status()
+    assert status["ok"] is True
+    assert status["update_available"] is True
+    assert status["remote_version"] == "1.1.13"
 
 
 def test_frozen_update_uses_overlay(monkeypatch, tmp_path):

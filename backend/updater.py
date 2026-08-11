@@ -235,6 +235,11 @@ def latest_release_asset() -> dict[str, Any] | None:
 def _friendly_update_error(exc: Exception) -> str:
     text = str(exc)
     lowered = text.lower()
+    if "rate limit" in lowered or ("403" in text and "github" in lowered):
+        return (
+            "GitHub временно ограничил частоту запросов (rate limit). "
+            "Проверка обновлений продолжится позже автоматически."
+        )
     if "404" in text or "not found" in lowered:
         return (
             "Репозиторий недоступен (проверьте, что он публичный): "
@@ -269,28 +274,31 @@ def get_update_status() -> dict[str, Any]:
         "message": "Актуальная версия.",
     }
 
-    try:
-        remote = remote_head_commit()
-    except Exception as exc:  # noqa: BLE001
-        LOGGER.warning("update check failed: %s", exc)
-        status["ok"] = False
-        status["message"] = _friendly_update_error(exc)
-        return status
-
-    remote_sha = remote.get("sha") or ""
     remote_version = remote_version_file() or ""
-    status["remote_commit"] = remote_sha
     status["remote_version"] = remote_version or None
-    status["remote_message"] = remote.get("message") or ""
-    status["remote_date"] = remote.get("date") or ""
+    remote_sha = ""
 
-    release = latest_release_asset()
-    if release:
-        status["release_asset"] = release
-        # Для frozen версию берём из ветки/VERSION: overlay обновляет код без замены exe.
-        # Тег релиза показываем только как доп. информацию.
-        if release.get("tag") and release["tag"] != local_version:
-            if not is_frozen() and not is_git_checkout():
+    # Для portable/runtime-zip не требуем API-коммиты: VERSION из raw обычно достаточно
+    # и не упирается в лимиты API.
+    if is_git_checkout():
+        try:
+            remote = remote_head_commit()
+            remote_sha = remote.get("sha") or ""
+            status["remote_commit"] = remote_sha
+            status["remote_message"] = remote.get("message") or ""
+            status["remote_date"] = remote.get("date") or ""
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("update check failed via commit endpoint: %s", exc)
+            if not remote_version:
+                status["ok"] = False
+                status["message"] = _friendly_update_error(exc)
+                return status
+
+    if not is_frozen() and not is_git_checkout():
+        release = latest_release_asset()
+        if release:
+            status["release_asset"] = release
+            if release.get("tag") and release["tag"] != local_version:
                 remote_version = release["tag"]
                 status["remote_version"] = remote_version
 
