@@ -20,7 +20,6 @@
         <ul class="nav nav-tabs app-tabs mb-3" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-recipe" type="button">Рецепт</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-directory" type="button">Справочник</button></li>
-            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-schemes" type="button">Схемы</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-availability" type="button">Наличие</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-settings" type="button">Настройки</button></li>
         </ul>
@@ -129,7 +128,7 @@
                     <div class="panel-head">
                         <div>
                             <div class="panel-title mb-0">Справочник препаратов</div>
-                            <div class="stub-note">Просмотр каталога. Схемы лечения редактируются на отдельной вкладке «Схемы».</div>
+                            <div class="stub-note">Просмотр каталога.</div>
                         </div>
                     </div>
                     <div class="table-responsive">
@@ -147,43 +146,6 @@
                                 </tr>
                             </thead>
                             <tbody id="directoryTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <section class="tab-pane fade" id="tab-schemes">
-                <div class="panel-box">
-                    <div class="panel-head">
-                        <div>
-                            <div class="panel-title mb-0">Редактирование схем лечения</div>
-                            <div class="stub-note">Изменения сохраняются в локальной базе и не стираются при обновлении приложения.</div>
-                        </div>
-                    </div>
-                    <div class="row g-2 align-items-end mb-3">
-                        <div class="col-12 col-lg-6">
-                            <label class="form-label mb-1" for="schemeEditorSearch">Поиск препарата</label>
-                            <input
-                                class="form-control form-control-sm"
-                                id="schemeEditorSearch"
-                                type="text"
-                                placeholder="МНН, русское или торговое название"
-                                autocomplete="off"
-                            >
-                        </div>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th style="min-width: 220px;">Препарат</th>
-                                    <th style="min-width: 150px;">Категория</th>
-                                    <th style="min-width: 340px;">Схемы лечения</th>
-                                    <th style="min-width: 150px;">Статус</th>
-                                    <th style="min-width: 140px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="schemeEditorTableBody"></tbody>
                         </table>
                     </div>
                 </div>

@@ -1,7 +1,7 @@
 """Версия приложения (синхронизируется с GitHub)."""
 
 APP_NAME = "Рецепты · Форма 1"
-APP_VERSION = "1.1.11"
+APP_VERSION = "1.1.12"
 GITHUB_OWNER = "DocKavetski"
 GITHUB_REPO = "recipie"
 GITHUB_BRANCH = "main"
