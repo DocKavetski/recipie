@@ -136,6 +136,30 @@ body {
     font-weight: 400;
 }
 
+.patient-card-link {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.patient-card-link:hover,
+.patient-card-link:focus-visible {
+    color: var(--ink);
+}
+
+.patient-card-hint {
+    color: var(--muted);
+    font-weight: 400;
+}
+
 .drug-search-bar {
     max-width: 720px;
 }

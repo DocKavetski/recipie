@@ -693,21 +693,24 @@ function applyPatientSmartInput(options = {}) {
 
     const parts = [];
     if (parsed.patient_name) {
-        parts.push(parsed.patient_name);
+        parts.push(`<span>${escapeHtml(parsed.patient_name)}</span>`);
     }
     if (parsed.birth_date) {
-        parts.push(parsed.birth_date);
+        parts.push(`<span>${escapeHtml(parsed.birth_date)}</span>`);
     }
     if (ageValue.value) {
-        parts.push(`${ageValue.value} лет`);
+        parts.push(`<span>${escapeHtml(ageValue.value)} лет</span>`);
     }
     if (parsed.card_number) {
-        parts.push(`карта ${parsed.card_number}`);
+        parts.push(
+            `<button type="button" class="patient-card-link" data-card="${escapeHtml(parsed.card_number)}" title="Загрузить прошлое лечение по этой карте">карта ${escapeHtml(parsed.card_number)}</button>`
+            + `<span class="patient-card-hint"> — нажмите, чтобы загрузить прошлое лечение</span>`,
+        );
     }
 
     if (patientParsedHint) {
         if (parts.length) {
-            patientParsedHint.textContent = parts.join(" · ");
+            patientParsedHint.innerHTML = parts.join(" · ");
             patientParsedHint.classList.remove("is-empty");
         } else {
             patientParsedHint.textContent = "Вставьте ФИО, дату и номер карты — всё разложится само";
@@ -755,6 +758,71 @@ function initPatientSmartInput() {
     });
     patientSmartInput.dataset.bound = "true";
     applyPatientSmartInput();
+    bindPatientCardHistoryClick();
+}
+
+async function loadHistoryByCardNumber(cardNumber, options = {}) {
+    const card = String(cardNumber || "").trim();
+    if (!card) {
+        setStatus("Введите номер карты для загрузки истории.");
+        return false;
+    }
+    if (!window.eel || typeof window.eel.load_last_history_entry !== "function") {
+        setStatus("Backend недоступен для загрузки истории.");
+        return false;
+    }
+
+    try {
+        const state = await window.eel.load_last_history_entry(card)();
+        if (!state) {
+            setStatus(`История по карте ${card} не найдена.`);
+            return false;
+        }
+
+        const keepPatient = Boolean(options.keepCurrentPatient);
+        const currentName = patientNameInput.value;
+        const currentBirth = birthDateInput.value;
+
+        restoreFormState({
+            ...state,
+            card_number: card,
+            patient_name: keepPatient && currentName ? currentName : (state.patient_name || ""),
+            birth_date: keepPatient && currentBirth ? currentBirth : (state.birth_date || ""),
+        }, {
+            keepCardNumber: true,
+            keepTreatmentParse: true,
+        });
+
+        const drugCount = Array.isArray(state.drugs)
+            ? state.drugs.filter((drug) => drug.mnn || drug.russian_name).length
+            : 0;
+        setStatus(
+            drugCount
+                ? `Загружено прошлое лечение по карте ${card} (${drugCount} преп.).`
+                : `Запись по карте ${card} загружена, препаратов в ней нет.`,
+        );
+        return true;
+    } catch (error) {
+        console.error(error);
+        setStatus("Не удалось загрузить историю.");
+        return false;
+    }
+}
+
+function bindPatientCardHistoryClick() {
+    if (!patientParsedHint || patientParsedHint.dataset.cardBound) {
+        return;
+    }
+    patientParsedHint.addEventListener("click", async (event) => {
+        const target = event.target.closest(".patient-card-link");
+        if (!target) {
+            return;
+        }
+        event.preventDefault();
+        const card = target.getAttribute("data-card") || cardNumberInput.value;
+        await loadHistoryByCardNumber(card, { keepCurrentPatient: true });
+    });
+    patientParsedHint.dataset.cardBound = "true";
 }
 
 function availabilityMeta(status) {
@@ -2285,27 +2353,11 @@ async function bindFormActions() {
         }
     });
 
-    loadHistoryBtn.addEventListener("click", async () => {
-        const cardNumber = cardNumberInput.value.trim();
-        if (!cardNumber) {
-            setStatus("Введите номер карты для загрузки истории.");
-            return;
-        }
-
-        try {
-            const state = await window.eel.load_last_history_entry(cardNumber)();
-            if (!state) {
-                setStatus("История по этому номеру карты не найдена.");
-                return;
-            }
-
-            restoreFormState(state);
-            setStatus("Последняя запись по номеру карты загружена.");
-        } catch (error) {
-            console.error(error);
-            setStatus("Не удалось загрузить историю.");
-        }
-    });
+    if (loadHistoryBtn) {
+        loadHistoryBtn.addEventListener("click", async () => {
+            await loadHistoryByCardNumber(cardNumberInput.value.trim(), { keepCurrentPatient: true });
+        });
+    }
 
     clearFormBtn.addEventListener("click", async () => {
         restoreFormState({
