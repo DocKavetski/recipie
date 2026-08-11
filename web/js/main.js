@@ -1131,7 +1131,10 @@ function populateRow(row, drug, options = {}) {
     row.querySelector(".drug-russian-input").value = drug.russian_name || "";
     row.querySelector(".drug-latin-input").value = drug.latin_name || "";
     row.querySelector(".drug-packaging-input").value = drug.packaging || "";
-    const baseDispenseQty = options.dispenseQty || drug.dispense_qty || extractDefaultDispenseQty(drug.packaging);
+    const hasExplicitDispense = options.dispenseQty !== undefined && options.dispenseQty !== null && options.dispenseQty !== "";
+    const baseDispenseQty = hasExplicitDispense
+        ? options.dispenseQty
+        : (drug.dispense_qty || extractDefaultDispenseQty(drug.packaging));
     row.querySelector(".drug-dispense-input").value = baseDispenseQty;
 
     const formSelect = row.querySelector(".drug-form-select");
@@ -1152,7 +1155,8 @@ function populateRow(row, drug, options = {}) {
     );
 
     const selectedDetails = (drug.trade_details || {})[selectedTrade];
-    if (selectedDetails) {
+    if (selectedDetails && !hasExplicitDispense) {
+        // Не перетираем № из разбора дневника (например №90) фасовкой торгового.
         row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;
         row.querySelector(".drug-dispense-input").value = selectedDetails.dispense_qty || extractDefaultDispenseQty(selectedDetails.packaging);
     }
@@ -1771,6 +1775,10 @@ function buildTreatmentNameIndex(catalog) {
         for (const alias of drug.search_aliases || []) {
             add(alias, drug, "alias");
         }
+        const latin = String(drug.latin_name || "").trim();
+        if (latin.toLowerCase().endsWith("um") && latin.length > 4) {
+            add(latin.slice(0, -2), drug, "mnn");
+        }
     }
 
     entries.sort((a, b) => b.key.length - a.key.length || a.key.localeCompare(b.key));
@@ -1819,7 +1827,7 @@ function extractTreatmentFormLocal(line) {
 }
 
 function extractTreatmentPackQtyLocal(line) {
-    const match = String(line || "").match(/\(?\s*[№N]\s*(\d+)\s*\)?/i);
+    const match = String(line || "").match(/(?:^|[\s(])(?:№|N)\s*(\d+)(?=$|[\s);,]|\b)/i);
     if (!match) {
         return { qty: null, line };
     }
@@ -1838,12 +1846,13 @@ function stripTreatmentParentheticalsLocal(line) {
 }
 
 function extractTreatmentDoseLocal(line) {
-    const match = String(line).match(/(?<!\d)(\d+(?:[.,]\d+)?)\s*(мг|mg|мкг|mcg|г|g)\.?/i);
+    const match = String(line).match(/(^|[^0-9])(\d+(?:[.,]\d+)?)\s*(мг|mg|мкг|mcg|г|g)\.?/i);
     if (!match) {
         return { dosage: "", line };
     }
-    const dosage = normalizeTreatmentDose(match[0]);
-    const cleaned = `${line.slice(0, match.index)} ${line.slice(match.index + match[0].length)}`
+    const dosage = normalizeTreatmentDose(match[0].replace(/^[^0-9]+/, ""));
+    const from = match.index + (match[1] ? match[1].length : 0);
+    const cleaned = `${line.slice(0, from)} ${line.slice(match.index + match[0].length)}`
         .replace(/\s+/g, " ")
         .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
     return { dosage, line: cleaned };
@@ -1872,6 +1881,12 @@ function extractTreatmentSchemeLocal(line) {
     return text;
 }
 
+function treatmentNamePattern(name) {
+    const escaped = String(name || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Без lookbehind — совместимее с встроенным браузером Eel.
+    return new RegExp(`(^|[^0-9a-zA-Zа-яА-ЯёЁ_])${escaped}(?:[аеуыиояю]|ом|ами|ах)?(?=[^0-9a-zA-Zа-яА-ЯёЁ_]|$)`, "i");
+}
+
 function findTreatmentDrugInLine(line, index) {
     const normalized = normalizeTreatmentMatchText(line);
     if (!normalized) {
@@ -1880,28 +1895,29 @@ function findTreatmentDrugInLine(line, index) {
     const kindPriority = { russian: 0, mnn: 1, alias: 2, trade: 3 };
     let best = null;
     for (const entry of index) {
-        const escaped = entry.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const pattern = new RegExp(`(?<!\\w)${escaped}[a-zа-я]{0,3}(?!\\w)`, "i");
+        const pattern = treatmentNamePattern(entry.key);
         const match = pattern.exec(normalized);
         if (!match) {
             continue;
         }
-        const rank = [match.index, kindPriority[entry.kind] ?? 9, -entry.key.length];
+        const start = match.index + (match[1] ? match[1].length : 0);
+        const rank = [start, kindPriority[entry.kind] ?? 9, -entry.key.length];
         if (!best || rank[0] < best.rank[0] || (rank[0] === best.rank[0] && (rank[1] < best.rank[1] || (rank[1] === best.rank[1] && rank[2] < best.rank[2])))) {
-            best = { entry, rank, pattern };
+            best = { entry, rank, pattern, start, match };
         }
     }
     if (!best) {
         return null;
     }
-    const sourceEscaped = String(best.entry.display || best.entry.key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const sourcePattern = new RegExp(`(?<!\\w)${sourceEscaped}[a-zа-я]{0,3}(?!\\w)`, "i");
-    const sourceMatch = sourcePattern.exec(line);
+    const sourcePattern = treatmentNamePattern(best.entry.display || best.entry.key);
+    const sourceMatch = sourcePattern.exec(line) || sourcePattern.exec(normalized);
     let remainder = line;
     if (sourceMatch) {
-        remainder = `${line.slice(0, sourceMatch.index)} ${line.slice(sourceMatch.index + sourceMatch[0].length)}`;
+        const prefixLen = sourceMatch[1] ? sourceMatch[1].length : 0;
+        const from = sourceMatch.index + prefixLen;
+        remainder = `${line.slice(0, from)} ${line.slice(sourceMatch.index + sourceMatch[0].length)}`;
     } else {
-        remainder = normalized.replace(best.pattern, " ");
+        remainder = normalized.replace(best.pattern, "$1 ");
     }
     remainder = stripTreatmentParentheticalsLocal(remainder);
     return { entry: best.entry, remainder };

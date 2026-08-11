@@ -47,7 +47,7 @@ _SCHEME_HINT = re.compile(
     re.IGNORECASE,
 )
 
-_PACK_QTY_RE = re.compile(r"\(?\s*[№N]\s*(\d+)\s*\)?", re.IGNORECASE)
+_PACK_QTY_RE = re.compile(r"(?:^|[\s(])(?:№|N)\s*(\d+)(?=$|[\s);,]|\b)", re.IGNORECASE)
 _PAREN_BLOCK_RE = re.compile(r"\([^)]*\)")
 
 _KIND_PRIORITY = {
@@ -91,10 +91,11 @@ class _NameEntry:
 
 
 def _word_boundary_pattern(name: str) -> re.Pattern[str]:
-    # Допускаем типичные русские окончания родительного/дательного падежа.
+    # Точное слово + короткие русские падежные окончания (а/у/ом…), без «догонки»
+    # лишними буквами внутри корня (чтобы «флувоксамин» не ел «флувоксин»).
     escaped = re.escape(name)
     if re.search(r"[а-яa-z]$", name, re.IGNORECASE):
-        return re.compile(rf"(?<!\w){escaped}[а-яa-z]{{0,3}}(?!\w)", re.IGNORECASE)
+        return re.compile(rf"(?<!\w){escaped}(?:[аеуыиояю]|ом|ами|ах)?(?!\w)", re.IGNORECASE)
     return re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
 
 
@@ -121,6 +122,10 @@ def build_name_index(catalog: list[dict[str, Any]]) -> list[_NameEntry]:
             add(trade, drug, "trade")
         for alias in drug.get("search_aliases") or []:
             add(alias, drug, "alias")
+        # Латынь без окончания -um/-i часто встречается в дневниках
+        latin = str(drug.get("latin_name") or "").strip()
+        if latin.lower().endswith("um") and len(latin) > 4:
+            add(latin[:-2], drug, "mnn")
 
     entries.sort(key=lambda item: (-len(item.key), item.key))
     return entries

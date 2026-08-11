@@ -143,3 +143,27 @@ def test_parse_real_diary_style(tmp_path: Path):
     assert oxcarb["selectedTrade"] == "Оксетол"
     assert oxcarb["dosage"] == "300 мг"
     assert oxcarb["dispenseQty"] == 90
+
+
+def test_fluvoxine_not_confused_with_fluoxetine(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    result = parse_treatment_text("Флувоксин 100 мг по 1 т на ночь (№90)", catalog)
+    assert result["ok"] is True
+    assert len(result["drugs"]) == 1
+    drug = result["drugs"][0]
+    assert drug["mnn"] == "Fluvoxamine"
+    assert drug["selectedTrade"] == "Флувоксин"
+    assert drug["dispenseQty"] == 90
+
+    other = parse_treatment_text("Флуоксетин 20 мг утром", catalog)
+    assert other["drugs"][0]["mnn"] == "Fluoxetine"
+
+
+def test_latin_scheme_copy_roundtrip(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    text = "Tab. Fluvoxaminum (Рокона, Феварин, Флувоксин) 100 мг — по 1 т на ночь"
+    result = parse_treatment_text(text, catalog)
+    assert result["ok"] is True
+    assert result["drugs"][0]["mnn"] == "Fluvoxamine"
+    assert result["drugs"][0]["dosage"] == "100 мг"
+    assert "на ночь" in result["drugs"][0]["selectedScheme"]
