@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.db import DrugRepository
+from backend.seed_loader import load_seed_drugs
 
 
 def test_catalog_search_finds_by_alias(tmp_path: Path):
@@ -32,3 +33,11 @@ def test_list_drugs_not_empty(tmp_path: Path):
     assert "диазепам" not in names
     assert "тофизопам" not in names
     assert "эсциталопрам" in names
+
+
+def test_catalog_excludes_solution_form():
+    drugs = load_seed_drugs()
+    for drug in drugs:
+        assert str(drug.get("drug_form", "")).lower() not in {"sol.", "sol"}
+        for form in drug.get("form_options", []):
+            assert str(form).lower() not in {"sol.", "sol"}

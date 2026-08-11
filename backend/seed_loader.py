@@ -39,6 +39,8 @@ CATEGORY_MAP = {
     "hormone": "Сопутствующие",
 }
 
+DISALLOWED_FORMS = {"sol.", "sol"}
+
 
 def _is_benzo(item: dict[str, Any]) -> bool:
     blob = " ".join(
@@ -118,7 +120,9 @@ def _normalize_form_options(item: dict[str, Any], drug_form: str) -> list[str]:
     options = [str(x).strip() for x in (item.get("form_options") or []) if str(x).strip()]
     if drug_form and drug_form not in options:
         options.insert(0, drug_form)
-    return list(dict.fromkeys(options)) or ([drug_form] if drug_form else ["Tab."])
+    allowed = [opt for opt in options if opt.lower().strip() not in DISALLOWED_FORMS]
+    fallback = drug_form if drug_form and drug_form.lower().strip() not in DISALLOWED_FORMS else "Tab."
+    return list(dict.fromkeys(allowed)) or [fallback]
 
 
 def _normalize_dosage_options(item: dict[str, Any], dosage: str) -> list[str]:
@@ -138,6 +142,8 @@ def _normalize_form_dosage_map(
     if isinstance(raw, dict):
         for form, doses in raw.items():
             key = str(form).strip()
+            if key.lower() in DISALLOWED_FORMS:
+                continue
             cleaned = [str(d).strip() for d in (doses or []) if str(d).strip()]
             if key and cleaned:
                 result[key] = list(dict.fromkeys(cleaned))
@@ -169,6 +175,8 @@ def normalize_seed_item(item: dict[str, Any]) -> dict[str, Any] | None:
     dispense_qty = int(qty_match.group(1)) if qty_match else 30
 
     drug_form = str(item.get("drug_form") or "Tab.").strip() or "Tab."
+    if drug_form.lower() in DISALLOWED_FORMS:
+        drug_form = "Tab."
     form_options = _normalize_form_options(item, drug_form)
     dosage_options = _normalize_dosage_options(item, dosage)
     form_dosage_map = _normalize_form_dosage_map(item, form_options, dosage_options)
