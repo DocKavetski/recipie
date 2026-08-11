@@ -131,6 +131,10 @@ def test_parse_real_diary_style(tmp_path: Path):
     assert fluvox["dispenseQty"] == 90
     assert "на ночь" in fluvox["selectedScheme"]
     assert "№" not in fluvox["selectedScheme"]
+    assert "(" not in fluvox["selectedScheme"]
+    assert ")" not in fluvox["selectedScheme"]
+    assert oxcarb["selectedScheme"].endswith("на ночь")
+    assert ")" not in oxcarb["selectedScheme"]
 
     assert quet["mnn"] == "Quetiapine"
     assert quet["mode"] == "mnn"

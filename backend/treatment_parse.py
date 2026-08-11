@@ -47,7 +47,10 @@ _SCHEME_HINT = re.compile(
     re.IGNORECASE,
 )
 
-_PACK_QTY_RE = re.compile(r"(?:^|[\s(])(?:№|N)\s*(\d+)(?=$|[\s);,]|\b)", re.IGNORECASE)
+_PACK_QTY_RE = re.compile(
+    r"(?:\(\s*(?:№|N)\s*(\d+)\s*\)|(?:^|[\s,;])(?:№|N)\s*(\d+)(?=$|[\s);,]|\b))",
+    re.IGNORECASE,
+)
 _PAREN_BLOCK_RE = re.compile(r"\([^)]*\)")
 
 _KIND_PRIORITY = {
@@ -231,13 +234,25 @@ def extract_pack_qty(text: str) -> tuple[int | None, str]:
     match = _PACK_QTY_RE.search(text or "")
     if not match:
         return None, text
+    raw_qty = match.group(1) or match.group(2)
     try:
-        qty = int(match.group(1))
-    except ValueError:
+        qty = int(raw_qty)
+    except (TypeError, ValueError):
         return None, text
     cleaned = f"{text[:match.start()]} {text[match.end():]}"
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;")
+    cleaned = re.sub(r"\(\s*\)", " ", cleaned)
+    cleaned = re.sub(r"\s+[()]\s*", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;()")
     return qty, cleaned
+
+
+def clean_scheme_text(value: Any) -> str:
+    text = str(value or "")
+    text = _PAREN_BLOCK_RE.sub(" ", text)
+    text = re.sub(r"[()]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip(" ,.;")
+    return text
 
 
 def strip_parentheticals(text: str) -> str:
@@ -362,7 +377,7 @@ def parse_treatment_line(line: str, index: list[_NameEntry]) -> dict[str, Any] |
         pack_qty = pack_qty or pack3
         scheme = extract_scheme(strip_parentheticals(remainder) or remainder)
 
-    scheme = re.sub(r"\s+", " ", scheme or "").strip(" ,.;")
+    scheme = clean_scheme_text(scheme)
     return drug_payload_from_match(
         entry,
         drug_form=form,

@@ -1827,15 +1827,25 @@ function extractTreatmentFormLocal(line) {
 }
 
 function extractTreatmentPackQtyLocal(line) {
-    const match = String(line || "").match(/(?:^|[\s(])(?:№|N)\s*(\d+)(?=$|[\s);,]|\b)/i);
+    const match = String(line || "").match(/\(\s*(?:№|N)\s*(\d+)\s*\)|(?:^|[\s,;])(?:№|N)\s*(\d+)(?=$|[\s);,]|\b)/i);
     if (!match) {
         return { qty: null, line };
     }
-    const qty = Number.parseInt(match[1], 10);
+    const qty = Number.parseInt(match[1] || match[2], 10);
     const cleaned = `${line.slice(0, match.index)} ${line.slice(match.index + match[0].length)}`
+        .replace(/\(\s*\)/g, " ")
+        .replace(/\s+[()]\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^[,.;()\s]+|[,.;()\s]+$/g, "");
+    return { qty: Number.isFinite(qty) ? qty : null, line: cleaned };
+}
+
+function cleanTreatmentSchemeLocal(value) {
+    return String(value || "")
+        .replace(/\([^)]*\)/g, " ")
+        .replace(/[()]/g, " ")
         .replace(/\s+/g, " ")
         .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
-    return { qty: Number.isFinite(qty) ? qty : null, line: cleaned };
 }
 
 function stripTreatmentParentheticalsLocal(line) {
@@ -2017,7 +2027,7 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
             packaging: packQty ? `N${packQty}` : (drug.packaging || ""),
             dispenseQty: packQty || undefined,
             selectedTrade,
-            selectedScheme: String(scheme || "").replace(/\s+/g, " ").replace(/^[,.;\s]+|[,.;\s]+$/g, ""),
+            selectedScheme: cleanTreatmentSchemeLocal(scheme),
             mode: selectedTrade ? "trade" : "mnn",
             matched_as: found.entry.display,
             match_kind: found.entry.kind,
