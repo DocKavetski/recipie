@@ -177,7 +177,7 @@ function numberToWordsRu(value) {
     return String(number);
 }
 
-function openPrintPreview(state) {
+function openPrintPreview(state, pdfPath = "") {
     const now = new Date();
     const months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
     const todayLong = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} г.`;
@@ -395,6 +395,7 @@ function openPrintPreview(state) {
     }
 
     const printStyles = printBlankCssText || "";
+    const escapedPdfPath = escapeHtml(pdfPath || "");
     previewWindow.document.write(`
         <!DOCTYPE html>
         <html lang="ru">
@@ -402,14 +403,34 @@ function openPrintPreview(state) {
             <meta charset="UTF-8">
             <title>Печать рецептов</title>
             <style>${printStyles}</style>
+            <style>
+              .print-toolbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:210mm;margin:0 auto 10px;padding:10px 12px;background:#eef4ff;border:1px solid #c8d9f0;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+              .print-action-btn{border:0;border-radius:6px;padding:8px 16px;font-size:14px;font-weight:600;cursor:pointer}
+              .print-action-btn-primary{background:#0d6efd;color:#fff}
+              .print-action-btn-secondary{background:#fff;color:#333;border:1px solid #ccc}
+              .print-note{font-size:12px;color:#444;line-height:1.35}
+              @media print{.print-toolbar,.print-hint{display:none!important}}
+            </style>
         </head>
         <body>
+            <div class="print-toolbar">
+              <button type="button" class="print-action-btn print-action-btn-primary" id="doPrintBtn">Печать</button>
+              <button type="button" class="print-action-btn print-action-btn-secondary" id="closePreviewBtn">Закрыть</button>
+              <span class="print-note">A4 · масштаб 100% · поля «нет» · дуплекс по длинной стороне${escapedPdfPath ? ` · PDF: ${escapedPdfPath}` : ""}</span>
+            </div>
             <div class="print-hint">
-              Печать: формат A4, масштаб <strong>100%</strong>, поля <strong>нет</strong>,
-              двусторонняя печать — <strong>по длинной стороне</strong> (переворот слева направо).
-              Рекомендуется печатать из PDF (открывается автоматически) — там точнее совпадение лицевой и оборота.
+              Нажмите синюю кнопку <strong>Печать</strong> (или Ctrl+P). В диалоге принтера выберите двустороннюю печать
+              <strong>по длинной стороне</strong>.
             </div>
             ${sheets.join("")}
+            <script>
+              document.getElementById("doPrintBtn").addEventListener("click", function () { window.print(); });
+              document.getElementById("closePreviewBtn").addEventListener("click", function () { window.close(); });
+              window.addEventListener("load", function () {
+                window.focus();
+                setTimeout(function () { window.print(); }, 400);
+              });
+            </script>
         </body>
         </html>
     `);
@@ -1580,10 +1601,7 @@ async function bindFormActions() {
             }
 
             const printState = result.payload || state;
-            if (window.eel && typeof window.eel.open_pdf_for_print === "function") {
-                await window.eel.open_pdf_for_print(result.pdf_path)();
-            }
-            openPrintPreview(printState);
+            openPrintPreview(printState, result.pdf_path);
             if (printState.card_number) {
                 await window.eel.save_history_entry(printState)();
             }
@@ -1592,8 +1610,9 @@ async function bindFormActions() {
                 ? ` Предупреждения: ${result.warnings.join(" ")}`
                 : "";
             setStatus(
-                `PDF открыт для печати: ${result.pdf_path}. `
-                + "Дуплекс: по длинной стороне, масштаб 100%, поля «нет»."
+                "Откроется окно предпросмотра — нажмите «Печать» или Ctrl+P. "
+                + "Дуплекс: по длинной стороне, масштаб 100%, поля «нет». "
+                + `PDF сохранён: ${result.pdf_path}.`
                 + warningText
             );
         } catch (error) {
