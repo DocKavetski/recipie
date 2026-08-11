@@ -42,9 +42,131 @@ let latestUpdateStatus = null;
 let printBlankCssText = "";
 
 const DUPLEX_BACK_SLOT = [1, 0, 3, 2];
+const PRINT_CUT_MARKS_HTML = `
+      <div class="cut-marks" aria-hidden="true">
+        <span class="tick tick-v tick-top"></span>
+        <span class="tick tick-v tick-bottom"></span>
+        <span class="tick tick-h tick-left"></span>
+        <span class="tick tick-h tick-right"></span>
+        <span class="cross-h"></span>
+        <span class="cross-v"></span>
+      </div>`;
+const PRINT_TOOLBAR_STYLE = `
+      .print-toolbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:210mm;margin:0 auto 10px;padding:10px 12px;background:#eef4ff;border:1px solid #c8d9f0;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+      .print-action-btn{border:0;border-radius:6px;padding:8px 16px;font-size:14px;font-weight:600;cursor:pointer}
+      .print-action-btn-primary{background:#0d6efd;color:#fff}
+      .print-action-btn-secondary{background:#fff;color:#333;border:1px solid #ccc}
+      .print-note{font-size:12px;color:#444;line-height:1.35}
+      @media print{.print-toolbar,.print-hint{display:none!important}}
+    `;
+const BACK_BLANK_HTML = `
+    <div class="blank">
+      <table class="form back">
+        <colgroup>
+          <col class="b1" />
+          <col class="b2" />
+          <col class="b3" />
+          <col class="b4" />
+          <col class="b5" />
+        </colgroup>
+        <tr class="row-1">
+          <th>Наименование лекарственного препарата, его лекарственная форма, дозировка, фасовка</th>
+          <th>Количество реализо-<br>ванных упаковок</th>
+          <th>Цена за упаковку, рублей</th>
+          <th>Сумма, рублей</th>
+          <th>№ аптеки, адрес, дата реализации и подпись фармацевтического работника</th>
+        </tr>
+        <tr class="row-2">
+          <td></td><td></td><td></td><td></td><td></td>
+        </tr>
+        <tr class="row-3">
+          <td colspan="5"></td>
+        </tr>
+        <tr class="row-4">
+          <td colspan="2">Номер лекарственного препарата аптечного изготовления</td>
+          <td colspan="3">Штамп аптеки</td>
+        </tr>
+        <tr class="row-5">
+          <td>Принял</td>
+          <td>Приготовил</td>
+          <td>Проверил</td>
+          <td colspan="2">Реализовал</td>
+        </tr>
+        <tr class="row-6">
+          <td></td><td></td><td></td><td colspan="2"></td>
+        </tr>
+      </table>
+    </div>
+  `;
 
 function setStatus(message) {
     statusText.textContent = message;
+}
+
+function normalizePreviewData(state, preview) {
+    const previewData = preview || {};
+    return {
+        stampHtml: (Array.isArray(previewData.stamp_lines) ? previewData.stamp_lines : [])
+            .map((line) => `<p>${escapeHtml(line)}</p>`)
+            .join(""),
+        todayLong: String(previewData.today_long || ""),
+        patientName: String(previewData.patient_name || formatNameWithInitials(state.patient_name)),
+        birthDate: String(previewData.birth_date || normalizeBirthDate(state.birth_date)),
+        doctorName: String(previewData.doctor_name || state.doctor_name || ""),
+        frontBatches: Array.isArray(previewData.front_batches) ? previewData.front_batches : [],
+        backFilledBatches: Array.isArray(previewData.back_filled_batches) ? previewData.back_filled_batches : [],
+        duplexBackSlot: Array.isArray(previewData.duplex_back_slot) && previewData.duplex_back_slot.length === 4
+            ? previewData.duplex_back_slot
+            : DUPLEX_BACK_SLOT,
+        unp: escapeHtml(previewData.unp || "191896187"),
+    };
+}
+
+function buildSheetMarkup(frontHtml, backHtml) {
+    return `
+        <section class="a4-sheet">
+          ${PRINT_CUT_MARKS_HTML}
+          <div class="a4-grid">${frontHtml}</div>
+        </section>
+        <section class="a4-sheet">
+          ${PRINT_CUT_MARKS_HTML}
+          <div class="a4-grid">${backHtml}</div>
+        </section>
+    `;
+}
+
+function buildPreviewDocumentHtml(sheets, printStyles, escapedPdfPath) {
+    return `
+        <!DOCTYPE html>
+        <html lang="ru">
+        <head>
+            <meta charset="UTF-8">
+            <title>Печать рецептов</title>
+            <style>${printStyles}</style>
+            <style>${PRINT_TOOLBAR_STYLE}</style>
+        </head>
+        <body>
+            <div class="print-toolbar">
+              <button type="button" class="print-action-btn print-action-btn-primary" id="doPrintBtn">Печать</button>
+              <button type="button" class="print-action-btn print-action-btn-secondary" id="closePreviewBtn">Закрыть</button>
+              <span class="print-note">A4 · масштаб 100% · отступ 4 мм в макете · дуплекс по длинной стороне${escapedPdfPath ? ` · PDF: ${escapedPdfPath}` : ""}</span>
+            </div>
+            <div class="print-hint">
+              Нажмите синюю кнопку <strong>Печать</strong> (или Ctrl+P). В диалоге принтера выберите двустороннюю печать
+              <strong>по длинной стороне</strong>.
+            </div>
+            ${sheets.join("")}
+            <script>
+              document.getElementById("doPrintBtn").addEventListener("click", function () { window.print(); });
+              document.getElementById("closePreviewBtn").addEventListener("click", function () { window.close(); });
+              window.addEventListener("load", function () {
+                window.focus();
+                setTimeout(function () { window.print(); }, 400);
+              });
+            </script>
+        </body>
+        </html>
+    `;
 }
 
 async function copyTextToClipboard(text) {
@@ -147,19 +269,8 @@ function extractDefaultDispenseQty(packaging) {
 }
 
 function openPrintPreview(state, pdfPath = "", preview = null) {
-    const previewData = preview || {};
-    const stampLines = Array.isArray(previewData.stamp_lines) ? previewData.stamp_lines : [];
-    const stampHtml = stampLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
-    const todayLong = String(previewData.today_long || "");
-    const patientName = String(previewData.patient_name || formatNameWithInitials(state.patient_name));
-    const birthDate = String(previewData.birth_date || normalizeBirthDate(state.birth_date));
-    const doctorName = String(previewData.doctor_name || state.doctor_name || "");
-    const frontBatches = Array.isArray(previewData.front_batches) ? previewData.front_batches : [];
-    const backFilledBatches = Array.isArray(previewData.back_filled_batches) ? previewData.back_filled_batches : [];
-    const duplexBackSlot = Array.isArray(previewData.duplex_back_slot) && previewData.duplex_back_slot.length === 4
-        ? previewData.duplex_back_slot
-        : DUPLEX_BACK_SLOT;
-    const unp = escapeHtml(previewData.unp || "191896187");
+    const previewModel = normalizePreviewData(state, preview);
+    const { stampHtml, todayLong, patientName, birthDate, doctorName, frontBatches, backFilledBatches, duplexBackSlot, unp } = previewModel;
 
     function renderDrugCell(drug) {
         if (!drug) {
@@ -245,45 +356,7 @@ function openPrintPreview(state, pdfPath = "", preview = null) {
         if (!filled) {
             return `<div class="blank blank-empty"></div>`;
         }
-        return `
-            <div class="blank">
-              <table class="form back">
-                <colgroup>
-                  <col class="b1" />
-                  <col class="b2" />
-                  <col class="b3" />
-                  <col class="b4" />
-                  <col class="b5" />
-                </colgroup>
-                <tr class="row-1">
-                  <th>Наименование лекарственного препарата, его лекарственная форма, дозировка, фасовка</th>
-                  <th>Количество реализо-<br>ванных упаковок</th>
-                  <th>Цена за упаковку, рублей</th>
-                  <th>Сумма, рублей</th>
-                  <th>№ аптеки, адрес, дата реализации и подпись фармацевтического работника</th>
-                </tr>
-                <tr class="row-2">
-                  <td></td><td></td><td></td><td></td><td></td>
-                </tr>
-                <tr class="row-3">
-                  <td colspan="5"></td>
-                </tr>
-                <tr class="row-4">
-                  <td colspan="2">Номер лекарственного препарата аптечного изготовления</td>
-                  <td colspan="3">Штамп аптеки</td>
-                </tr>
-                <tr class="row-5">
-                  <td>Принял</td>
-                  <td>Приготовил</td>
-                  <td>Проверил</td>
-                  <td colspan="2">Реализовал</td>
-                </tr>
-                <tr class="row-6">
-                  <td></td><td></td><td></td><td colspan="2"></td>
-                </tr>
-              </table>
-            </div>
-        `;
+        return BACK_BLANK_HTML;
     }
 
     function renderFrontSheet(batch) {
@@ -305,26 +378,7 @@ function openPrintPreview(state, pdfPath = "", preview = null) {
     for (let i = 0; i < frontBatches.length; i += 1) {
         const batch = Array.isArray(frontBatches[i]) ? frontBatches[i] : [null, null, null, null];
         const backBatch = Array.isArray(backFilledBatches[i]) ? backFilledBatches[i] : [false, false, false, false];
-        const cutMarks = `
-              <div class="cut-marks" aria-hidden="true">
-                <span class="tick tick-v tick-top"></span>
-                <span class="tick tick-v tick-bottom"></span>
-                <span class="tick tick-h tick-left"></span>
-                <span class="tick tick-h tick-right"></span>
-                <span class="cross-h"></span>
-                <span class="cross-v"></span>
-              </div>`;
-
-        sheets.push(`
-            <section class="a4-sheet">
-              ${cutMarks}
-              <div class="a4-grid">${renderFrontSheet(batch)}</div>
-            </section>
-            <section class="a4-sheet">
-              ${cutMarks}
-              <div class="a4-grid">${renderBackSheet(backBatch)}</div>
-            </section>
-        `);
+        sheets.push(buildSheetMarkup(renderFrontSheet(batch), renderBackSheet(backBatch)));
     }
 
     const previewWindow = window.open("", "_blank", "width=1100,height=820");
@@ -335,44 +389,7 @@ function openPrintPreview(state, pdfPath = "", preview = null) {
 
     const printStyles = printBlankCssText || "";
     const escapedPdfPath = escapeHtml(pdfPath || "");
-    previewWindow.document.write(`
-        <!DOCTYPE html>
-        <html lang="ru">
-        <head>
-            <meta charset="UTF-8">
-            <title>Печать рецептов</title>
-            <style>${printStyles}</style>
-            <style>
-              .print-toolbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:210mm;margin:0 auto 10px;padding:10px 12px;background:#eef4ff;border:1px solid #c8d9f0;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
-              .print-action-btn{border:0;border-radius:6px;padding:8px 16px;font-size:14px;font-weight:600;cursor:pointer}
-              .print-action-btn-primary{background:#0d6efd;color:#fff}
-              .print-action-btn-secondary{background:#fff;color:#333;border:1px solid #ccc}
-              .print-note{font-size:12px;color:#444;line-height:1.35}
-              @media print{.print-toolbar,.print-hint{display:none!important}}
-            </style>
-        </head>
-        <body>
-            <div class="print-toolbar">
-              <button type="button" class="print-action-btn print-action-btn-primary" id="doPrintBtn">Печать</button>
-              <button type="button" class="print-action-btn print-action-btn-secondary" id="closePreviewBtn">Закрыть</button>
-              <span class="print-note">A4 · масштаб 100% · отступ 4 мм в макете · дуплекс по длинной стороне${escapedPdfPath ? ` · PDF: ${escapedPdfPath}` : ""}</span>
-            </div>
-            <div class="print-hint">
-              Нажмите синюю кнопку <strong>Печать</strong> (или Ctrl+P). В диалоге принтера выберите двустороннюю печать
-              <strong>по длинной стороне</strong>.
-            </div>
-            ${sheets.join("")}
-            <script>
-              document.getElementById("doPrintBtn").addEventListener("click", function () { window.print(); });
-              document.getElementById("closePreviewBtn").addEventListener("click", function () { window.close(); });
-              window.addEventListener("load", function () {
-                window.focus();
-                setTimeout(function () { window.print(); }, 400);
-              });
-            </script>
-        </body>
-        </html>
-    `);
+    previewWindow.document.write(buildPreviewDocumentHtml(sheets, printStyles, escapedPdfPath));
     previewWindow.document.close();
     previewWindow.focus();
 }
