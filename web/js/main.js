@@ -416,7 +416,7 @@ function openPrintPreview(state, pdfPath = "") {
             <div class="print-toolbar">
               <button type="button" class="print-action-btn print-action-btn-primary" id="doPrintBtn">Печать</button>
               <button type="button" class="print-action-btn print-action-btn-secondary" id="closePreviewBtn">Закрыть</button>
-              <span class="print-note">A4 · масштаб 100% · поля «нет» · дуплекс по длинной стороне${escapedPdfPath ? ` · PDF: ${escapedPdfPath}` : ""}</span>
+              <span class="print-note">A4 · масштаб 100% · отступ 4 мм в макете · дуплекс по длинной стороне${escapedPdfPath ? ` · PDF: ${escapedPdfPath}` : ""}</span>
             </div>
             <div class="print-hint">
               Нажмите синюю кнопку <strong>Печать</strong> (или Ctrl+P). В диалоге принтера выберите двустороннюю печать
@@ -1611,7 +1611,8 @@ async function bindFormActions() {
                 : "";
             setStatus(
                 "Откроется окно предпросмотра — нажмите «Печать» или Ctrl+P. "
-                + "Дуплекс: по длинной стороне, масштаб 100%, поля «нет». "
+                + "Дуплекс: по длинной стороне, масштаб 100%. "
+                + "Поля принтера: «нет» или «по умолчанию» (4 мм уже в макете). "
                 + `PDF сохранён: ${result.pdf_path}.`
                 + warningText
             );

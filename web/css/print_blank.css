@@ -1,17 +1,16 @@
 /* Бланк формы 1 — 4 на A4. Геометрия = backend/print_layout.py
-   Бланк 105×148 мм, 0.5 мм сверху/снизу листа, без зазора между бланками.
-   Оборот: явные слоты grid (зеркало L/R для дуплекса по длинной стороне). */
+   Поле 4 мм от края листа (необрезаемая зона принтера), бланк 101×144.5 мм. */
 
 :root {
   --ink: #111;
   --grid: #222;
   --paper: #fff;
-  --sheet-pad-y: 0.5mm;
-  --form-w: 105mm;
-  --form-h: 148mm;
+  --page-margin: 4mm;
+  --form-w: 101mm;
+  --form-h: 144.5mm;
   --blank-pad: 1.8mm;
   --cut: #666;
-  --cut-inset: 0.8mm;
+  --cut-inset: 4mm;
 }
 
 * { box-sizing: border-box; }
@@ -77,35 +76,25 @@ body {
   line-height: 1.35;
 }
 
-@media print {
-  body { background: #fff; }
-  .print-toolbar,
-  .print-hint { display: none !important; }
-  .a4-sheet {
-    margin: 0;
-    box-shadow: none;
-    page-break-after: always;
-  }
-}
-
 .a4-sheet {
   position: relative;
   width: 210mm;
   height: 297mm;
   margin: 10px auto;
-  padding: var(--sheet-pad-y) 0;
+  padding: var(--page-margin);
   background: #fff;
   page-break-after: always;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 2px 10px rgba(0,0,0,.15);
+  box-sizing: border-box;
 }
 
 .a4-grid {
   display: grid;
   grid-template-columns: var(--form-w) var(--form-w);
   grid-template-rows: var(--form-h) var(--form-h);
-  width: 210mm;
-  height: calc(var(--form-h) * 2);
+  width: calc(210mm - 2 * var(--page-margin));
+  height: calc(297mm - 2 * var(--page-margin));
   gap: 0;
 }
 
@@ -316,5 +305,24 @@ table.form tr:last-child td {
 
 @page {
   size: 210mm 297mm;
-  margin: 0;
+  margin: 4mm;
+}
+
+@media print {
+  body { background: #fff; }
+  .print-toolbar,
+  .print-hint { display: none !important; }
+  .a4-sheet {
+    margin: 0 auto;
+    padding: 0;
+    width: auto;
+    height: auto;
+    box-shadow: none;
+    page-break-after: always;
+    overflow: visible;
+  }
+  .a4-grid {
+    width: calc(210mm - 8mm);
+    height: calc(297mm - 8mm);
+  }
 }

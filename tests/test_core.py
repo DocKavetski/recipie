@@ -307,8 +307,9 @@ class TestPrintGeometry:
 
         assert PAGE_MARGIN_X * 2 + FORM_W * 2 + GUTTER_X == pytest.approx(A4_W)
         assert PAGE_MARGIN_Y * 2 + FORM_H * 2 + GUTTER_Y == pytest.approx(A4_H)
-        assert FORM_W == pytest.approx(105 * mm)
-        assert FORM_H == pytest.approx(148 * mm)
+        assert FORM_W == pytest.approx(101 * mm)
+        assert FORM_H == pytest.approx(144.5 * mm)
+        assert PAGE_MARGIN_X == pytest.approx(4 * mm)
 
     def test_front_back_content_boxes_register_on_long_edge_duplex(self):
         from backend.print_layout import A4_W, blank_origins, content_box
