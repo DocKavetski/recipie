@@ -136,6 +136,22 @@ def search_catalog_drugs(query):
 
 
 @eel.expose
+def list_drug_schemes():
+    return REPOSITORY.list_drugs()
+
+
+@eel.expose
+def save_drug_schemes(mnn, scheme_options):
+    schemes = scheme_options if isinstance(scheme_options, list) else []
+    return REPOSITORY.save_drug_schemes(mnn or "", schemes)
+
+
+@eel.expose
+def reset_drug_schemes(mnn):
+    return REPOSITORY.reset_drug_schemes(mnn or "")
+
+
+@eel.expose
 def get_app_settings():
     return SETTINGS.load()
 

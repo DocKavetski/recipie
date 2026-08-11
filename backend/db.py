@@ -61,6 +61,15 @@ class DrugRepository:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS custom_drug_schemes (
+                    mnn TEXT PRIMARY KEY,
+                    scheme_options_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
             connection.commit()
 
             columns = {
@@ -143,11 +152,13 @@ class DrugRepository:
             cursor = connection.execute(
                 """
                 SELECT
-                    category, mnn, russian_name, latin_name, drug_form, dosage, packaging,
-                    trade_names_json, search_aliases_json, scheme_options_json, trade_details_json,
-                    form_options_json, dosage_options_json, form_dosage_map_json
+                    drugs.category, drugs.mnn, drugs.russian_name, drugs.latin_name, drugs.drug_form, drugs.dosage, drugs.packaging,
+                    drugs.trade_names_json, drugs.search_aliases_json, drugs.scheme_options_json, drugs.trade_details_json,
+                    drugs.form_options_json, drugs.dosage_options_json, drugs.form_dosage_map_json,
+                    custom_drug_schemes.scheme_options_json AS custom_scheme_options_json
                 FROM drugs
-                ORDER BY category, russian_name
+                LEFT JOIN custom_drug_schemes USING (mnn)
+                ORDER BY drugs.category, drugs.russian_name
                 """
             )
             return [self._row_to_dict(row) for row in cursor.fetchall()]
@@ -233,6 +244,45 @@ class DrugRepository:
             row = cursor.fetchone()
             return json.loads(row["payload_json"]) if row else None
 
+    def save_drug_schemes(self, mnn: str, scheme_options: list[str]) -> dict[str, Any]:
+        key = str(mnn or "").strip()
+        if not key:
+            raise ValueError("MNN is required.")
+
+        cleaned: list[str] = []
+        for scheme in scheme_options or []:
+            text = str(scheme or "").strip()
+            if text and text not in cleaned:
+                cleaned.append(text)
+        if not cleaned:
+            raise ValueError("At least one scheme is required.")
+
+        with self._connect() as connection:
+            exists = connection.execute("SELECT 1 FROM drugs WHERE mnn = ?", (key,)).fetchone()
+            if not exists:
+                raise ValueError("Drug not found.")
+            connection.execute(
+                """
+                INSERT INTO custom_drug_schemes (mnn, scheme_options_json, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(mnn) DO UPDATE SET
+                    scheme_options_json = excluded.scheme_options_json,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, json.dumps(cleaned, ensure_ascii=False)),
+            )
+            connection.commit()
+        return {"ok": True, "mnn": key, "scheme_options": cleaned}
+
+    def reset_drug_schemes(self, mnn: str) -> dict[str, Any]:
+        key = str(mnn or "").strip()
+        if not key:
+            raise ValueError("MNN is required.")
+        with self._connect() as connection:
+            connection.execute("DELETE FROM custom_drug_schemes WHERE mnn = ?", (key,))
+            connection.commit()
+        return {"ok": True, "mnn": key}
+
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         keys = set(row.keys())
@@ -247,6 +297,11 @@ class DrugRepository:
             dosage_options = [row["dosage"]]
         if not form_dosage_map:
             form_dosage_map = {form: list(dosage_options) for form in form_options}
+        scheme_options = json.loads(row["scheme_options_json"])
+        has_custom_scheme = False
+        if "custom_scheme_options_json" in keys and row["custom_scheme_options_json"]:
+            scheme_options = json.loads(row["custom_scheme_options_json"])
+            has_custom_scheme = True
         return {
             "category": row["category"],
             "mnn": row["mnn"],
@@ -260,6 +315,7 @@ class DrugRepository:
             "form_dosage_map": form_dosage_map,
             "trade_names": json.loads(row["trade_names_json"]),
             "search_aliases": json.loads(row["search_aliases_json"]),
-            "scheme_options": json.loads(row["scheme_options_json"]),
+            "scheme_options": scheme_options,
+            "has_custom_scheme": has_custom_scheme,
             "trade_details": json.loads(row["trade_details_json"] or "{}"),
         }
