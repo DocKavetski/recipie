@@ -1145,7 +1145,7 @@ function addDrugFromSearch(drug) {
 
     addDrugRow(drug, {
         mode: "mnn",
-        availability: "none",
+        availability: "unknown",
         drug_form: drug.drug_form,
         dosage: drug.dosage,
     });
@@ -1359,7 +1359,7 @@ function addDrugRow(drug = null, options = {}) {
     bindFormDosageSelects(row);
     bindSchemeInput(row);
     bindRowRemoval(row);
-    setAvailabilityBadge(row, options.availability || "none");
+    setAvailabilityBadge(row, options.availability || "unknown");
 
     drugRowsContainer.appendChild(row);
     refreshDrugsEmptyState();
@@ -1408,7 +1408,7 @@ function restoreFormState(state, options = {}) {
                 dosage: drug.dosage,
                 dispenseQty: drug.dispenseQty || 1,
                 selectedScheme: drug.selectedScheme || "",
-                availability: availabilityFromLabel(drug.availability),
+                availability: "unknown",
             },
         );
     }
