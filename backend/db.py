@@ -95,6 +95,15 @@ class DrugRepository:
             connection.commit()
 
         self.sync_seed_catalog(replace=True)
+        self._ensure_runtime_exposes()
+
+    def _ensure_runtime_exposes(self) -> None:
+        try:
+            from backend.runtime_exposes import register_repository_exposes
+
+            register_repository_exposes(self)
+        except Exception:  # noqa: BLE001
+            LOGGER.debug("runtime exposes skipped", exc_info=True)
 
     def sync_seed_catalog(self, replace: bool = True) -> None:
         drugs = load_seed_drugs()

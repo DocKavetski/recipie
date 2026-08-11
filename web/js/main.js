@@ -1667,6 +1667,275 @@ function applyParsedTreatmentDrugs(drugs) {
     });
 }
 
+function normalizeTreatmentMatchText(value) {
+    return String(value || "")
+        .replace(/\u00a0/g, " ")
+        .trim()
+        .toLowerCase()
+        .replace(/ё/g, "е")
+        .replace(/["'`«»]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function normalizeTreatmentDose(value) {
+    const raw = String(value || "").trim().toLowerCase().replace(/ё/g, "е").replace(/,/g, ".");
+    const match = raw.match(/(?<!\d)(\d+(?:\.\d+)?)\s*(мг|mg|мкг|mcg|г|g)\.?/);
+    if (!match) {
+        return raw;
+    }
+    let amount = match[1].replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+    const unitMap = { mg: "мг", mcg: "мкг", g: "г" };
+    const unit = unitMap[match[2]] || match[2];
+    return `${amount} ${unit}`;
+}
+
+function buildTreatmentNameIndex(catalog) {
+    const entries = [];
+    const seen = new Set();
+
+    const add = (raw, drug, kind) => {
+        const display = String(raw || "").trim();
+        const key = normalizeTreatmentMatchText(display);
+        if (key.length < 3) {
+            return;
+        }
+        const marker = `${key}::${drug.mnn || ""}`;
+        if (seen.has(marker)) {
+            return;
+        }
+        seen.add(marker);
+        entries.push({ key, drug, kind, display });
+    };
+
+    for (const drug of catalog) {
+        add(drug.russian_name, drug, "russian");
+        add(drug.mnn, drug, "mnn");
+        add(drug.latin_name, drug, "mnn");
+        for (const trade of drug.trade_names || []) {
+            add(trade, drug, "trade");
+        }
+        for (const alias of drug.search_aliases || []) {
+            add(alias, drug, "alias");
+        }
+    }
+
+    entries.sort((a, b) => b.key.length - a.key.length || a.key.localeCompare(b.key));
+    return entries;
+}
+
+function splitTreatmentLinesLocal(text) {
+    const skip = /^(?:лечение|рекомендации|терапия|назначено|принимает|принимать|схема(?:\s+при[её]ма)?|препараты|rp\.?|recipe)\s*:?\s*$/i;
+    const bullet = /^\s*(?:[-–—*•]+|\d+[.)]|\(\d+\))\s*/;
+    const lines = [];
+    for (const block of String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")) {
+        const parts = block.split(/\s*;\s*/).map((part) => part.trim()).filter(Boolean);
+        for (const chunk of parts.length ? parts : []) {
+            const line = chunk.replace(bullet, "").replace(/^[\s.]+|[\s.]+$/g, "");
+            if (!line || skip.test(normalizeTreatmentMatchText(line))) {
+                continue;
+            }
+            lines.push(line);
+        }
+    }
+    return lines;
+}
+
+function extractTreatmentFormLocal(line) {
+    const patterns = [
+        [/\btab(?:lets?)?\.?\b/i, "Tab."],
+        [/\bтаблет(?:к[аи]|ок|ке|ку)?\b/i, "Tab."],
+        [/\bcaps?(?:ules?)?\.?\b/i, "Caps."],
+        [/\bкапсул(?:ы|а|е|у)?\b/i, "Caps."],
+        [/\bsir(?:up)?\.?\b/i, "Sir."],
+        [/\bсироп(?:а|е|у)?\b/i, "Sir."],
+    ];
+    for (const [pattern, form] of patterns) {
+        const match = line.match(pattern);
+        if (!match) {
+            continue;
+        }
+        const cleaned = `${line.slice(0, match.index)} ${line.slice(match.index + match[0].length)}`
+            .replace(/\s+/g, " ")
+            .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+        return { form, line: cleaned };
+    }
+    return { form: "", line };
+}
+
+function extractTreatmentDoseLocal(line) {
+    const match = String(line).match(/(?<!\d)(\d+(?:[.,]\d+)?)\s*(мг|mg|мкг|mcg|г|g)\.?/i);
+    if (!match) {
+        return { dosage: "", line };
+    }
+    const dosage = normalizeTreatmentDose(match[0]);
+    const cleaned = `${line.slice(0, match.index)} ${line.slice(match.index + match[0].length)}`
+        .replace(/\s+/g, " ")
+        .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+    return { dosage, line: cleaned };
+}
+
+function splitTreatmentHeadAndScheme(line) {
+    const parts = String(line || "").split(/\s*[—–−]\s*|\s+[-:]\s+/);
+    if (parts.length >= 2 && parts[1].trim()) {
+        return {
+            head: parts[0].replace(/^[,.;\s]+|[,.;\s]+$/g, ""),
+            scheme: parts.slice(1).join(" — ").replace(/^[,.;\s]+|[,.;\s]+$/g, ""),
+        };
+    }
+    return { head: String(line || "").trim(), scheme: "" };
+}
+
+function extractTreatmentSchemeLocal(line) {
+    const text = String(line || "").replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+    if (!text) {
+        return "";
+    }
+    const hint = text.match(/\b(?:по\s+\d|утром|вечером|ноч[ьюи]|днём|днем|раза?\s+в\s+день|р\/?д|через\s+день|по\s+потребности|на\s+ночь|перед\s+сном|после\s+еды|до\s+еды|1\/2|½|табл)/i);
+    if (hint) {
+        return text.slice(hint.index).replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+    }
+    return text;
+}
+
+function findTreatmentDrugInLine(line, index) {
+    const normalized = normalizeTreatmentMatchText(line);
+    if (!normalized) {
+        return null;
+    }
+    for (const entry of index) {
+        const escaped = entry.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const pattern = new RegExp(`(?<!\\w)${escaped}[a-zа-я]{0,3}(?!\\w)`, "i");
+        if (!pattern.test(normalized)) {
+            continue;
+        }
+        const sourceEscaped = String(entry.display || entry.key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const sourcePattern = new RegExp(`(?<!\\w)${sourceEscaped}[a-zа-я]{0,3}(?!\\w)`, "i");
+        const sourceMatch = sourcePattern.exec(line);
+        let remainder = line;
+        if (sourceMatch) {
+            remainder = `${line.slice(0, sourceMatch.index)} ${line.slice(sourceMatch.index + sourceMatch[0].length)}`;
+        } else {
+            remainder = normalized.replace(pattern, " ");
+        }
+        remainder = remainder.replace(/\s+/g, " ").replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+        return { entry, remainder };
+    }
+    return null;
+}
+
+function pickTreatmentForm(drug, requested) {
+    const options = (drug.form_options || []).map((item) => String(item).trim()).filter(Boolean);
+    if (!options.length) {
+        return requested || drug.drug_form || "";
+    }
+    if (requested) {
+        const found = options.find((option) => option.toLowerCase().replace(/\.$/, "") === requested.toLowerCase().replace(/\.$/, ""));
+        if (found) {
+            return found;
+        }
+    }
+    return drug.drug_form || options[0];
+}
+
+function pickTreatmentDosage(drug, requested, form) {
+    const mapped = drug.form_dosage_map?.[form];
+    const options = (mapped || drug.dosage_options || []).map((item) => String(item).trim()).filter(Boolean);
+    if (!options.length) {
+        return requested || drug.dosage || "";
+    }
+    if (requested) {
+        const want = normalizeTreatmentDose(requested);
+        const exact = options.find((option) => normalizeTreatmentDose(option) === want);
+        if (exact) {
+            return exact;
+        }
+        const wantNum = want.match(/^[\d.]+/);
+        if (wantNum) {
+            const partial = options.find((option) => normalizeTreatmentDose(option).startsWith(wantNum[0]));
+            if (partial) {
+                return partial;
+            }
+        }
+        return requested;
+    }
+    return drug.dosage || options[0];
+}
+
+function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
+    const lines = splitTreatmentLinesLocal(text);
+    if (!lines.length) {
+        return { ok: false, drugs: [], unmatched: [], message: "Вставьте текст лечения из дневника." };
+    }
+    const index = buildTreatmentNameIndex(catalog);
+    const drugs = [];
+    const unmatched = [];
+    const seen = new Set();
+
+    for (const line of lines) {
+        const { head, scheme: schemeFromSplit } = splitTreatmentHeadAndScheme(line);
+        let working = head;
+        const formExtract = extractTreatmentFormLocal(working);
+        working = formExtract.line;
+        const doseExtract = extractTreatmentDoseLocal(working);
+        working = doseExtract.line;
+        const found = findTreatmentDrugInLine(working, index);
+        if (!found) {
+            unmatched.push(line);
+            continue;
+        }
+        let remainder = found.remainder;
+        const form2 = extractTreatmentFormLocal(remainder);
+        remainder = form2.line;
+        const dose2 = extractTreatmentDoseLocal(remainder);
+        remainder = dose2.line;
+        const form = pickTreatmentForm(found.entry.drug, formExtract.form || form2.form);
+        const dosage = pickTreatmentDosage(found.entry.drug, doseExtract.dosage || dose2.dosage, form);
+        const scheme = schemeFromSplit || extractTreatmentSchemeLocal(remainder);
+        const drug = found.entry.drug;
+        const selectedTrade = found.entry.kind === "trade" ? found.entry.display : "";
+        const payload = {
+            ...drug,
+            drug_form: form,
+            dosage,
+            selectedTrade,
+            selectedScheme: scheme,
+            mode: selectedTrade ? "trade" : "mnn",
+            matched_as: found.entry.display,
+            match_kind: found.entry.kind,
+        };
+        if (payload.mnn && seen.has(payload.mnn)) {
+            const filtered = drugs.filter((item) => item.mnn !== payload.mnn);
+            drugs.length = 0;
+            drugs.push(...filtered);
+        }
+        if (payload.mnn) {
+            seen.add(payload.mnn);
+        }
+        drugs.push(payload);
+    }
+
+    if (!drugs.length) {
+        return { ok: false, drugs: [], unmatched, message: "Не удалось определить препараты в тексте." };
+    }
+    let message = `Определено препаратов: ${drugs.length}`;
+    if (unmatched.length) {
+        message += `, не распознано строк: ${unmatched.length}`;
+    }
+    return { ok: true, drugs, unmatched, message };
+}
+
+async function resolveTreatmentParse(text) {
+    if (window.eel && typeof window.eel.parse_treatment === "function") {
+        try {
+            return await window.eel.parse_treatment(text)();
+        } catch (error) {
+            console.warn("eel.parse_treatment failed, using local parser", error);
+        }
+    }
+    return parseTreatmentTextLocal(text, catalogDrugs);
+}
+
 async function parseAndApplyTreatment() {
     const text = String(treatmentParseInput?.value || "").trim();
     if (!text) {
@@ -1677,8 +1946,8 @@ async function parseAndApplyTreatment() {
         treatmentParseInput?.focus();
         return;
     }
-    if (!window.eel || typeof window.eel.parse_treatment !== "function") {
-        setStatus("Backend недоступен для разбора лечения.");
+    if (!catalogDrugs.length && !(window.eel && typeof window.eel.parse_treatment === "function")) {
+        setStatus("Каталог препаратов ещё не загружен.");
         return;
     }
 
@@ -1687,7 +1956,7 @@ async function parseAndApplyTreatment() {
     }
     setStatus("Определяю лечение…");
     try {
-        const result = await window.eel.parse_treatment(text)();
+        const result = await resolveTreatmentParse(text);
         const drugs = Array.isArray(result?.drugs) ? result.drugs : [];
         if (!result?.ok || !drugs.length) {
             const unmatched = (result?.unmatched || []).slice(0, 3).join("; ");
