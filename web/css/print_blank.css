@@ -1,15 +1,14 @@
-/* Бланк формы 1 — 4 на A4 с полями и метками разреза.
-   Геометрия совпадает с backend/pdf_gen.py:
-   page-margin 3mm, gutter 6mm (= 2×margin) → бланк 99×142.5 мм.
-   После разреза по центру отступы у куска одинаковы со всех сторон;
-   дуплекс по длинной стороне (L/R) совмещает лицевую и оборот. */
+/* Бланк формы 1 — 4 на A4. Геометрия = backend/print_layout.py
+   Бланк 105×148 мм, 0.5 мм сверху/снизу листа, без зазора между бланками.
+   Оборот: явные слоты grid (зеркало L/R для дуплекса по длинной стороне). */
 
 :root {
   --ink: #111;
   --grid: #222;
   --paper: #fff;
-  --page-margin: 3mm;
-  --gutter: 6mm;
+  --sheet-pad-y: 0.5mm;
+  --form-w: 105mm;
+  --form-h: 148mm;
   --blank-pad: 1.8mm;
   --cut: #666;
   --cut-inset: 0.8mm;
@@ -24,12 +23,22 @@ body {
   color: var(--ink);
 }
 
+.print-hint {
+  max-width: 210mm;
+  margin: 8px auto;
+  padding: 8px 12px;
+  background: #fff8e6;
+  border: 1px solid #e6d9a8;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .a4-sheet {
   position: relative;
   width: 210mm;
   height: 297mm;
   margin: 10px auto;
-  padding: var(--page-margin);
+  padding: var(--sheet-pad-y) 0;
   background: #fff;
   page-break-after: always;
   overflow: hidden;
@@ -38,16 +47,23 @@ body {
 
 .a4-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: var(--gutter);
-  width: 100%;
-  height: 100%;
+  grid-template-columns: var(--form-w) var(--form-w);
+  grid-template-rows: var(--form-h) var(--form-h);
+  width: 210mm;
+  height: calc(var(--form-h) * 2);
+  gap: 0;
 }
 
-/* Дуплекс по длинной стороне: зеркало L/R */
-.duplex-back { direction: rtl; }
-.duplex-back > .blank { direction: ltr; }
+.blank-slot-0 { grid-column: 1; grid-row: 1; }
+.blank-slot-1 { grid-column: 2; grid-row: 1; }
+.blank-slot-2 { grid-column: 1; grid-row: 2; }
+.blank-slot-3 { grid-column: 2; grid-row: 2; }
+
+.blank-slot {
+  width: var(--form-w);
+  height: var(--form-h);
+  overflow: hidden;
+}
 
 .blank {
   width: 100%;
@@ -62,7 +78,6 @@ body {
   background: transparent;
 }
 
-/* Короткие метки разреза по центру краёв и крестик в центре */
 .cut-marks {
   position: absolute;
   inset: 0;
@@ -122,7 +137,6 @@ table.form {
   font-size: 9px;
   line-height: 1.12;
   box-sizing: border-box;
-  /* внешняя рамка — нижняя линия не обрезается overflow */
   border: 1px solid var(--grid);
 }
 
@@ -206,7 +220,6 @@ table.form tr:last-child td {
 .front .h-r3 { height: 21mm; }
 .front .h-r4 { height: 23mm; }
 .front .h-r5 { height: 23mm; }
-/* нижняя строка срока действия забирает остаток высоты таблицы */
 
 .back { font-size: 8px; }
 .back col.b1 { width: 30.04%; }
@@ -243,19 +256,20 @@ table.form tr:last-child td {
   text-align: center;
   vertical-align: middle !important;
 }
-/* row-6 — остаток высоты, как в PDF */
 
 .strike { text-decoration: line-through; }
 
 @page {
-  size: A4;
+  size: 210mm 297mm;
   margin: 0;
 }
 
 @media print {
   body { background: #fff; }
+  .print-hint { display: none !important; }
   .a4-sheet {
     margin: 0;
     box-shadow: none;
+    page-break-after: always;
   }
 }

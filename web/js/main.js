@@ -39,6 +39,9 @@ let autosaveTimer = null;
 let searchMatches = [];
 let searchActiveIndex = 0;
 let latestUpdateStatus = null;
+let printBlankCssText = "";
+
+const DUPLEX_BACK_SLOT = [1, 0, 3, 2];
 
 function setStatus(message) {
     statusText.textContent = message;
@@ -345,6 +348,21 @@ function openPrintPreview(state) {
         `;
     }
 
+    function renderFrontSheet(batch) {
+        return [0, 1, 2, 3]
+            .map((slot) => `<div class="blank-slot blank-slot-${slot}">${renderFront(batch[slot])}</div>`)
+            .join("");
+    }
+
+    function renderBackSheet(batch) {
+        return [0, 1, 2, 3]
+            .map((frontIdx) => {
+                const slot = DUPLEX_BACK_SLOT[frontIdx];
+                return `<div class="blank-slot blank-slot-${slot}">${renderBack(Boolean(batch[frontIdx]))}</div>`;
+            })
+            .join("");
+    }
+
     const sheets = [];
     for (let i = 0; i < blanks.length; i += 4) {
         const batch = [0, 1, 2, 3].map((offset) => blanks[i + offset] || null);
@@ -361,21 +379,11 @@ function openPrintPreview(state) {
         sheets.push(`
             <section class="a4-sheet">
               ${cutMarks}
-              <div class="a4-grid">
-                ${renderFront(batch[0])}
-                ${renderFront(batch[1])}
-                ${renderFront(batch[2])}
-                ${renderFront(batch[3])}
-              </div>
+              <div class="a4-grid">${renderFrontSheet(batch)}</div>
             </section>
             <section class="a4-sheet">
               ${cutMarks}
-              <div class="a4-grid duplex-back">
-                ${renderBack(Boolean(batch[0]))}
-                ${renderBack(Boolean(batch[1]))}
-                ${renderBack(Boolean(batch[2]))}
-                ${renderBack(Boolean(batch[3]))}
-              </div>
+              <div class="a4-grid">${renderBackSheet(batch)}</div>
             </section>
         `);
     }
@@ -386,65 +394,38 @@ function openPrintPreview(state) {
         return;
     }
 
+    const printStyles = printBlankCssText || "";
     previewWindow.document.write(`
         <!DOCTYPE html>
         <html lang="ru">
         <head>
             <meta charset="UTF-8">
             <title>Печать рецептов</title>
-            <link rel="stylesheet" href="http://127.0.0.1:8000/css/print_blank.css">
-            <style>
-              /* fallback = print_blank.css (must stay in sync with PDF geometry) */
-              :root{--page-margin:3mm;--gutter:6mm;--blank-pad:1.8mm;--cut-inset:.8mm}
-              body{margin:0;background:#d7d7d7;font-family:Arial,Helvetica,sans-serif;color:#111}
-              .a4-sheet{position:relative;width:210mm;height:297mm;margin:10px auto;padding:var(--page-margin);background:#fff;page-break-after:always;overflow:hidden;box-sizing:border-box}
-              .a4-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:var(--gutter);width:100%;height:100%}
-              .duplex-back{direction:rtl}.duplex-back>.blank{direction:ltr}
-              .blank{width:100%;height:100%;padding:var(--blank-pad);overflow:hidden;box-sizing:border-box}
-              .blank-empty{padding:0;background:transparent}
-              .cut-marks{position:absolute;inset:0;pointer-events:none;z-index:5}
-              .cut-marks .tick{position:absolute;background:#666}
-              .cut-marks .tick-v{width:.25mm;height:4mm;left:50%;transform:translateX(-50%)}
-              .cut-marks .tick-h{height:.25mm;width:4mm;top:50%;transform:translateY(-50%)}
-              .cut-marks .tick-top{top:var(--cut-inset)}.cut-marks .tick-bottom{bottom:var(--cut-inset)}
-              .cut-marks .tick-left{left:var(--cut-inset)}.cut-marks .tick-right{right:var(--cut-inset)}
-              .cut-marks .cross-h,.cut-marks .cross-v{position:absolute;left:50%;top:50%;background:#666}
-              .cut-marks .cross-h{width:5mm;height:.25mm;transform:translate(-50%,-50%)}
-              .cut-marks .cross-v{width:.25mm;height:5mm;transform:translate(-50%,-50%)}
-              table.form{width:100%;height:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;line-height:1.12;box-sizing:border-box;border:1px solid #222}
-              table.form td,table.form th{border:1px solid #222;vertical-align:top;padding:1mm 1.2mm;word-wrap:break-word}
-              table.form tr:last-child td{border-bottom:1px solid #222}
-              .center{text-align:center}.middle{vertical-align:middle!important}
-              .title{font-size:12px}.head-label{font-size:10px;line-height:1.1}
-              .block-tight p,.rx p,.date-box p,.person p{margin:0 0 .8mm}
-              .org,.law-head{font-size:7.5px;line-height:1.12}.person{font-size:9px}
-              .rx-label{width:16.55%;font-size:11px;vertical-align:middle}
-              .rx{font-size:10px}.rx .drug{font-size:11px}.rx .sig-small{font-size:9px}
-              .sign-block{padding-top:5mm!important;font-size:8px;line-height:1.2}
-              .validity{text-align:center;font-size:9px;padding-top:1.5mm!important;padding-bottom:1.5mm!important}
-              .front col.c1{width:16.55%}.front col.c2{width:32.90%}.front col.c3{width:50.55%}
-              .front .h-r0{height:25mm}.front .h-r1{height:13.5mm}.front .h-r2{height:15.5mm}
-              .front .h-r3{height:21mm}.front .h-r4{height:23mm}.front .h-r5{height:23mm}
-              .back{font-size:8px}
-              .back col.b1{width:30.04%}.back col.b2{width:18.42%}.back col.b3{width:14.48%}
-              .back col.b4{width:11.30%}.back col.b5{width:25.76%}
-              .back th{font-weight:400;text-align:center;vertical-align:middle!important}
-              .back .row-1 th{height:14mm}
-              .back .row-2 td{height:9mm;border-top:0;text-align:center;vertical-align:middle!important}
-              .back .row-3 td{height:13mm;border-left-color:transparent;border-right-color:transparent}
-              .back .row-4 td{height:14mm;text-align:center;vertical-align:middle!important}
-              .back .row-5 td{height:10mm;text-align:center;vertical-align:middle!important}
-              .strike{text-decoration:line-through}
-              @page{size:A4;margin:0}
-              @media print{body{background:#fff}.a4-sheet{margin:0;box-shadow:none}}
-            </style>
+            <style>${printStyles}</style>
         </head>
-        <body>${sheets.join("")}</body>
+        <body>
+            <div class="print-hint">
+              Печать: формат A4, масштаб <strong>100%</strong>, поля <strong>нет</strong>,
+              двусторонняя печать — <strong>по длинной стороне</strong> (переворот слева направо).
+              Рекомендуется печатать из PDF (открывается автоматически) — там точнее совпадение лицевой и оборота.
+            </div>
+            ${sheets.join("")}
+        </body>
         </html>
     `);
     previewWindow.document.close();
     previewWindow.focus();
-    setTimeout(() => previewWindow.print(), 250);
+}
+
+async function loadPrintBlankCss() {
+    try {
+        const response = await fetch("/css/print_blank.css", { cache: "no-store" });
+        if (response.ok) {
+            printBlankCssText = await response.text();
+        }
+    } catch (error) {
+        console.warn("print_blank.css not loaded", error);
+    }
 }
 
 function calculateAge(dateString) {
@@ -1599,6 +1580,9 @@ async function bindFormActions() {
             }
 
             const printState = result.payload || state;
+            if (window.eel && typeof window.eel.open_pdf_for_print === "function") {
+                await window.eel.open_pdf_for_print(result.pdf_path)();
+            }
             openPrintPreview(printState);
             if (printState.card_number) {
                 await window.eel.save_history_entry(printState)();
@@ -1607,7 +1591,11 @@ async function bindFormActions() {
             const warningText = (result.warnings || []).length
                 ? ` Предупреждения: ${result.warnings.join(" ")}`
                 : "";
-            setStatus(`PDF сформирован: ${result.pdf_path}.${warningText}`);
+            setStatus(
+                `PDF открыт для печати: ${result.pdf_path}. `
+                + "Дуплекс: по длинной стороне, масштаб 100%, поля «нет»."
+                + warningText
+            );
         } catch (error) {
             console.error(error);
             setStatus("Не удалось сформировать PDF.");
@@ -1722,6 +1710,7 @@ async function initPrototype() {
     bindDoctorControls();
     bindGlobalDrugSearch();
     bindUpdateControls();
+    await loadPrintBlankCss();
     await loadCatalogFromBackend();
     await loadSettingsFromBackend();
     await refreshTemplates();

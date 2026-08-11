@@ -10,23 +10,20 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from backend.patient_parse import format_name_with_initials, normalize_birth_date
+from backend.print_layout import (
+    A4_H,
+    A4_W,
+    CUT_CROSS,
+    CUT_INSET,
+    CUT_TICK,
+    FORM_H,
+    FORM_W,
+    blank_origins,
+    content_box,
+)
 from backend.rx_format import format_rp_lines
 from backend.validate import chunk_drugs, duplex_back_index
 
-
-# 4 бланка на A4. Поля и желоб подобраны так, чтобы после разреза
-# по центру у каждого куска были одинаковые отступы со всех сторон
-# (PAGE_MARGIN == GUTTER/2), и лицевая/оборот совпали при дуплексе L/R.
-A4_W = 210 * mm
-A4_H = 297 * mm
-PAGE_MARGIN = 3 * mm
-GUTTER = 6 * mm  # = 2 * PAGE_MARGIN
-FORM_W = (A4_W - 2 * PAGE_MARGIN - GUTTER) / 2  # 99 mm
-FORM_H = (A4_H - 2 * PAGE_MARGIN - GUTTER) / 2  # 142.5 mm
-PAD = 1.8 * mm
-CUT_TICK = 4 * mm
-CUT_CROSS = 5 * mm
-CUT_INSET = 0.8 * mm
 
 _FONT_REGISTERED = False
 FONT_NAME = "AppSans"
@@ -94,7 +91,7 @@ def _wrap(pdf: canvas.Canvas, text: str, font: str, size: float, max_width: floa
 
 def _content_box(ox: float, oy: float) -> tuple[float, float, float, float]:
     """left, bottom, width, height of printable table area."""
-    return ox + PAD, oy + PAD, FORM_W - 2 * PAD, FORM_H - 2 * PAD
+    return content_box(ox, oy)
 
 
 def _draw_cell(pdf: canvas.Canvas, x: float, y: float, w: float, h: float) -> None:
@@ -326,23 +323,7 @@ def _draw_back(pdf: canvas.Canvas, ox: float, oy: float) -> None:
 
 
 def _blank_origins() -> list[tuple[float, float]]:
-    """
-    4 бланка на A4 (2x2) с равными полями после разреза по центру:
-      [0][1]
-      [2][3]
-    PAGE_MARGIN == GUTTER/2, поэтому у каждого куска отступ одинаков
-    с внешнего края и со стороны реза — лицевая и оборот совпадают.
-    """
-    left_x = PAGE_MARGIN
-    right_x = PAGE_MARGIN + FORM_W + GUTTER
-    bottom_y = PAGE_MARGIN
-    top_y = PAGE_MARGIN + FORM_H + GUTTER
-    return [
-        (left_x, top_y),
-        (right_x, top_y),
-        (left_x, bottom_y),
-        (right_x, bottom_y),
-    ]
+    return blank_origins()
 
 
 def _draw_cut_guides(pdf: canvas.Canvas) -> None:

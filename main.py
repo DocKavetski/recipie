@@ -24,6 +24,7 @@ from backend.tabletka import availability_to_dict, check_availability_minsk, sea
 from backend.updater import apply_update, cleanup_update_artifacts, get_update_status, open_repo_in_browser
 from backend.validate import normalize_prescription_payload, validate_prescription_payload
 from backend.version import APP_VERSION, GITHUB_URL
+from backend.printer import open_pdf
 
 
 def resource_path(*parts: str) -> Path:
@@ -198,6 +199,15 @@ def refresh_catalog_availability(limit=20):
             }
         )
     return {"ok": True, "city": "Минск", "rows": rows}
+
+
+@eel.expose
+def open_pdf_for_print(pdf_path):
+    try:
+        path = open_pdf(pdf_path)
+        return {"ok": True, "path": path}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "message": str(exc)}
 
 
 @eel.expose

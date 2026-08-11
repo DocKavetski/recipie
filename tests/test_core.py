@@ -294,45 +294,40 @@ class TestPrintGeometry:
     def test_sheet_fits_a4_with_equal_cut_margins(self):
         from reportlab.lib.units import mm
 
-        from backend.pdf_gen import (
+        from backend.print_layout import (
             A4_H,
             A4_W,
             FORM_H,
             FORM_W,
-            GUTTER,
-            PAGE_MARGIN,
+            GUTTER_X,
+            GUTTER_Y,
+            PAGE_MARGIN_X,
+            PAGE_MARGIN_Y,
         )
 
-        assert PAGE_MARGIN * 2 + FORM_W * 2 + GUTTER == pytest.approx(A4_W)
-        assert PAGE_MARGIN * 2 + FORM_H * 2 + GUTTER == pytest.approx(A4_H)
-        # после реза по центру отступ от края куска == отступ от линии реза
-        assert GUTTER == pytest.approx(2 * PAGE_MARGIN)
-        assert FORM_W == pytest.approx(99 * mm)
-        assert FORM_H == pytest.approx(142.5 * mm)
+        assert PAGE_MARGIN_X * 2 + FORM_W * 2 + GUTTER_X == pytest.approx(A4_W)
+        assert PAGE_MARGIN_Y * 2 + FORM_H * 2 + GUTTER_Y == pytest.approx(A4_H)
+        assert FORM_W == pytest.approx(105 * mm)
+        assert FORM_H == pytest.approx(148 * mm)
 
     def test_front_back_content_boxes_register_on_long_edge_duplex(self):
-        from backend.pdf_gen import A4_W, FORM_H, FORM_W, PAD, _blank_origins
+        from backend.print_layout import A4_W, blank_origins, content_box
         from backend.validate import duplex_back_index
 
-        origins = _blank_origins()
+        origins = blank_origins()
         for front_idx in range(4):
             ox, oy = origins[front_idx]
-            front_left = ox + PAD
-            front_right = ox + FORM_W - PAD
-            front_bottom = oy + PAD
-            front_top = oy + FORM_H - PAD
+            front_left, front_bottom, fw, fh = content_box(ox, oy)
+            front_right = front_left + fw
 
             bx, by = origins[duplex_back_index(front_idx)]
-            back_left = bx + PAD
-            back_right = bx + FORM_W - PAD
-            back_bottom = by + PAD
-            back_top = by + FORM_H - PAD
+            back_left, back_bottom, bw, bh = content_box(bx, by)
+            back_right = back_left + bw
 
-            # L/R flip: x' = A4_W - x (края меняются местами)
             assert A4_W - back_right == pytest.approx(front_left)
             assert A4_W - back_left == pytest.approx(front_right)
             assert back_bottom == pytest.approx(front_bottom)
-            assert back_top == pytest.approx(front_top)
+            assert back_bottom + bh == pytest.approx(front_bottom + fh)
 
 
 class TestPdfSmoke:
