@@ -208,8 +208,15 @@ function buildSchemeClipboardText(drugs) {
     return drugs
         .filter((drug) => drug.mnn)
         .map((drug) => {
-            const title = drug.russian_name || drug.mnn;
-            const head = [drug.drug_form, title, drug.dosage].filter(Boolean).join(" ").trim();
+            const form = String(drug.drug_form || "").trim();
+            const latin = String(drug.latin_name || "").trim();
+            const title = latin || String(drug.russian_name || drug.mnn || "").trim();
+            const trades = (Array.isArray(drug.trade_names) ? drug.trade_names : [])
+                .map((name) => String(name || "").trim())
+                .filter(Boolean);
+            const tradePart = trades.length ? `(${trades.join(", ")})` : "";
+            const dosage = String(drug.dosage || "").trim();
+            const head = [form, title, tradePart, dosage].filter(Boolean).join(" ").trim();
             const scheme = String(drug.selectedScheme || "").trim();
             return scheme ? `${head} — ${scheme}` : head;
         })
