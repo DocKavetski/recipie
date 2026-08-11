@@ -30,30 +30,29 @@
                 <div class="workspace-grid">
                 <div class="panel-box">
                     <div class="panel-title">Пациент</div>
-                    <div class="row g-2 align-items-end">
-                        <div class="col-12 col-md-3 col-xl-2">
-                            <label class="form-label" for="cardNumberInput">Номер карты</label>
-                            <div class="input-group input-group-sm">
-                                <input class="form-control" id="cardNumberInput" type="text" placeholder="12543/26">
-                                <button class="btn btn-outline-secondary" id="loadHistoryBtn" type="button" title="Загрузить последнюю выписку">История</button>
-                            </div>
-                        </div>
-                        <div class="col-12 col-md-9 col-xl-10">
+                    <div class="d-flex flex-wrap align-items-end gap-2">
+                        <div class="flex-grow-1" style="min-width: 240px;">
                             <label class="form-label" for="patientSmartInput">ФИО, дата и номер карты</label>
                             <input
                                 class="form-control form-control-sm patient-smart-input"
                                 id="patientSmartInput"
                                 type="text"
-                                placeholder="Махсма В.В. 14.03.1998 112567"
+                                placeholder="Иванов П.С. 27.11.1983 12543/26"
                                 autocomplete="off"
                             >
                             <div class="patient-parsed is-empty mt-1" id="patientParsedHint">
                                 Вставьте ФИО, дату и номер карты — всё разложится само
                             </div>
+                            <input id="cardNumberInput" type="hidden" value="">
                             <input id="patientNameInput" type="hidden" value="">
                             <input id="birthDate" type="hidden" value="">
                             <input id="ageValue" type="hidden" value="">
                             <input id="recipeDoctorInput" type="hidden" value="">
+                        </div>
+                        <div class="pb-1">
+                            <button class="btn btn-sm btn-outline-secondary" id="loadHistoryBtn" type="button" title="Загрузить последнюю выписку по номеру карты">
+                                История
+                            </button>
                         </div>
                     </div>
                 </div>

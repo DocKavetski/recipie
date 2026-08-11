@@ -688,14 +688,10 @@ function applyPatientSmartInput(options = {}) {
     patientNameInput.value = parsed.patient_name;
     birthDateInput.value = parsed.birth_date;
     ageValue.value = calculateAge(parsed.birth_date);
-    if (parsed.card_number) {
-        cardNumberInput.value = parsed.card_number;
-    }
+    // Всегда синхронизируем карту из единого поля (в т.ч. очищаем).
+    cardNumberInput.value = parsed.card_number || "";
 
     const parts = [];
-    if (parsed.card_number || cardNumberInput.value.trim()) {
-        parts.push(`карта ${parsed.card_number || cardNumberInput.value.trim()}`);
-    }
     if (parsed.patient_name) {
         parts.push(parsed.patient_name);
     }
@@ -704,6 +700,9 @@ function applyPatientSmartInput(options = {}) {
     }
     if (ageValue.value) {
         parts.push(`${ageValue.value} лет`);
+    }
+    if (parsed.card_number) {
+        parts.push(`карта ${parsed.card_number}`);
     }
 
     if (patientParsedHint) {
@@ -720,7 +719,7 @@ function applyPatientSmartInput(options = {}) {
         patientSmartInput.value = composePatientSmartValue(
             parsed.patient_name,
             parsed.birth_date,
-            parsed.card_number || cardNumberInput.value,
+            parsed.card_number,
         );
     }
 
@@ -1424,6 +1423,15 @@ function addDrugRow(drug = null, options = {}) {
     refreshDrugsEmptyState();
 }
 
+function clearTreatmentParseInput(message = "Система найдёт препараты в каталоге и добавит их в рецепт") {
+    if (treatmentParseInput) {
+        treatmentParseInput.value = "";
+    }
+    if (treatmentParseHint) {
+        treatmentParseHint.textContent = message;
+    }
+}
+
 function restoreFormState(state, options = {}) {
     if (!state) {
         return;
@@ -1437,6 +1445,9 @@ function restoreFormState(state, options = {}) {
     syncPatientSmartFromFields();
     syncDoctorInputs(state.doctor_name || recipeDoctorInput.value || "");
     clearDrugRows();
+    if (!options.keepTreatmentParse) {
+        clearTreatmentParseInput();
+    }
 
     const drugs = Array.isArray(state.drugs) ? state.drugs : [];
     for (const drug of drugs) {
@@ -2097,14 +2108,14 @@ async function parseAndApplyTreatment() {
         }
 
         applyParsedTreatmentDrugs(drugs);
+        const unmatchedCount = (result.unmatched || []).length;
+        clearTreatmentParseInput(
+            unmatchedCount
+                ? `Добавлено: ${drugs.length}, не распознано: ${unmatchedCount}`
+                : `Добавлено в рецепт: ${drugs.length}`,
+        );
         scheduleAutosave();
         setStatus(result.message || `Добавлено препаратов: ${drugs.length}`);
-        if (treatmentParseHint) {
-            const unmatchedCount = (result.unmatched || []).length;
-            treatmentParseHint.textContent = unmatchedCount
-                ? `Добавлено: ${drugs.length}, не распознано: ${unmatchedCount}`
-                : `Добавлено в рецепт: ${drugs.length}`;
-        }
     } catch (error) {
         console.error(error);
         setStatus("Не удалось разобрать лечение.");
@@ -2297,9 +2308,13 @@ async function bindFormActions() {
     });
 
     clearFormBtn.addEventListener("click", async () => {
-        const currentCard = cardNumberInput.value;
-        restoreFormState({ card_number: currentCard, patient_name: "", birth_date: "", doctor_name: recipeDoctorInput.value, drugs: [] });
-        cardNumberInput.value = currentCard;
+        restoreFormState({
+            card_number: "",
+            patient_name: "",
+            birth_date: "",
+            doctor_name: recipeDoctorInput.value,
+            drugs: [],
+        });
         setStatus("Форма очищена.");
         await saveAutosaveState();
     });
