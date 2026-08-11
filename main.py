@@ -24,6 +24,7 @@ from backend.print_preview import build_preview_context
 from backend.runtime_control import build_restart_command, hard_exit, spawn_restart
 from backend.settings import SettingsStore
 from backend.tabletka import availability_to_dict, check_availability_minsk, search_tabletka
+from backend.treatment_parse import parse_treatment_text
 from backend.updater import apply_update, cleanup_update_artifacts, get_update_status, open_repo_in_browser
 from backend.validate import normalize_prescription_payload, validate_prescription_payload
 from backend.version import APP_VERSION, GITHUB_URL
@@ -133,6 +134,11 @@ def get_catalog_drugs():
 @eel.expose
 def search_catalog_drugs(query):
     return REPOSITORY.search_drugs(query)
+
+
+@eel.expose
+def parse_treatment(text):
+    return parse_treatment_text(text or "", REPOSITORY.list_drugs())
 
 
 @eel.expose

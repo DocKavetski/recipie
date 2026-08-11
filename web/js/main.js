@@ -30,6 +30,9 @@ const templateManagerLoadBtn = document.getElementById("templateManagerLoadBtn")
 const templateManagerDeleteBtn = document.getElementById("templateManagerDeleteBtn");
 const templateManagerPreview = document.getElementById("templateManagerPreview");
 const showSchemeBtn = document.getElementById("showSchemeBtn");
+const treatmentParseInput = document.getElementById("treatmentParseInput");
+const parseTreatmentBtn = document.getElementById("parseTreatmentBtn");
+const treatmentParseHint = document.getElementById("treatmentParseHint");
 const globalDrugSearch = document.getElementById("globalDrugSearch");
 const drugSearchDropdown = document.getElementById("drugSearchDropdown");
 const appVersionLabel = document.getElementById("appVersionLabel");
@@ -1626,6 +1629,116 @@ async function loadTemplateIntoForm(templateName) {
     }
 }
 
+function applyParsedTreatmentDrugs(drugs) {
+    clearDrugRows();
+    for (const drug of drugs) {
+        if (!drug?.mnn && !drug?.russian_name) {
+            continue;
+        }
+        const catalogMatch = catalogDrugs.find((item) => item.mnn === drug.mnn) || {};
+        addDrugRow(
+            {
+                ...catalogMatch,
+                ...drug,
+                form_options: drug.form_options?.length ? drug.form_options : catalogMatch.form_options,
+                dosage_options: drug.dosage_options?.length ? drug.dosage_options : catalogMatch.dosage_options,
+                form_dosage_map: (drug.form_dosage_map && Object.keys(drug.form_dosage_map).length)
+                    ? drug.form_dosage_map
+                    : catalogMatch.form_dosage_map,
+                trade_names: drug.trade_names?.length ? drug.trade_names : catalogMatch.trade_names,
+                scheme_options: drug.scheme_options?.length ? drug.scheme_options : catalogMatch.scheme_options,
+                trade_details: Object.keys(drug.trade_details || {}).length
+                    ? drug.trade_details
+                    : catalogMatch.trade_details,
+            },
+            {
+                mode: drug.mode || (drug.selectedTrade ? "trade" : "mnn"),
+                selectedTrade: drug.selectedTrade || "",
+                drug_form: drug.drug_form,
+                dosage: drug.dosage,
+                selectedScheme: drug.selectedScheme || "",
+                availability: "unknown",
+            },
+        );
+    }
+
+    Array.from(drugRowsContainer.querySelectorAll(".drug-row")).forEach((row) => {
+        refreshRowAvailability(row);
+    });
+}
+
+async function parseAndApplyTreatment() {
+    const text = String(treatmentParseInput?.value || "").trim();
+    if (!text) {
+        setStatus("Вставьте текст лечения из дневника.");
+        if (treatmentParseHint) {
+            treatmentParseHint.textContent = "Нужен текст лечения";
+        }
+        treatmentParseInput?.focus();
+        return;
+    }
+    if (!window.eel || typeof window.eel.parse_treatment !== "function") {
+        setStatus("Backend недоступен для разбора лечения.");
+        return;
+    }
+
+    if (parseTreatmentBtn) {
+        parseTreatmentBtn.disabled = true;
+    }
+    setStatus("Определяю лечение…");
+    try {
+        const result = await window.eel.parse_treatment(text)();
+        const drugs = Array.isArray(result?.drugs) ? result.drugs : [];
+        if (!result?.ok || !drugs.length) {
+            const unmatched = (result?.unmatched || []).slice(0, 3).join("; ");
+            const detail = unmatched ? ` Не распознано: ${unmatched}` : "";
+            setStatus((result?.message || "Не удалось определить лечение.") + detail);
+            if (treatmentParseHint) {
+                treatmentParseHint.textContent = result?.message || "Ничего не найдено";
+            }
+            return;
+        }
+
+        applyParsedTreatmentDrugs(drugs);
+        scheduleAutosave();
+        setStatus(result.message || `Добавлено препаратов: ${drugs.length}`);
+        if (treatmentParseHint) {
+            const unmatchedCount = (result.unmatched || []).length;
+            treatmentParseHint.textContent = unmatchedCount
+                ? `Добавлено: ${drugs.length}, не распознано: ${unmatchedCount}`
+                : `Добавлено в рецепт: ${drugs.length}`;
+        }
+    } catch (error) {
+        console.error(error);
+        setStatus("Не удалось разобрать лечение.");
+        if (treatmentParseHint) {
+            treatmentParseHint.textContent = "Ошибка разбора";
+        }
+    } finally {
+        if (parseTreatmentBtn) {
+            parseTreatmentBtn.disabled = false;
+        }
+    }
+}
+
+function bindTreatmentParseControls() {
+    if (parseTreatmentBtn && !parseTreatmentBtn.dataset.bound) {
+        parseTreatmentBtn.addEventListener("click", () => {
+            parseAndApplyTreatment();
+        });
+        parseTreatmentBtn.dataset.bound = "true";
+    }
+    if (treatmentParseInput && !treatmentParseInput.dataset.bound) {
+        treatmentParseInput.addEventListener("keydown", (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                event.preventDefault();
+                parseAndApplyTreatment();
+            }
+        });
+        treatmentParseInput.dataset.bound = "true";
+    }
+}
+
 async function bindTemplateManagerControls() {
     if (!templateManagerSelect || templateManagerSelect.dataset.bound) {
         return;
@@ -1880,6 +1993,7 @@ async function initPrototype() {
     }
 
     await bindFormActions();
+    bindTreatmentParseControls();
     initAgeField();
     await restoreAutosaveState();
 

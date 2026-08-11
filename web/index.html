@@ -106,6 +106,25 @@
                 </div>
 
                 <div class="panel-box">
+                    <div class="panel-title">Разбор лечения</div>
+                    <label class="form-label mb-1" for="treatmentParseInput">Текст из дневника</label>
+                    <textarea
+                        class="form-control form-control-sm treatment-parse-input"
+                        id="treatmentParseInput"
+                        rows="4"
+                        placeholder="Вставьте лечение из прошлого дневника, например:&#10;Эсциталопрам 10 мг — по 1 таблетке утром&#10;Кветиапин 25 мг на ночь"
+                    ></textarea>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                        <button class="btn btn-sm btn-outline-primary" id="parseTreatmentBtn" type="button">
+                            Определить лечение
+                        </button>
+                        <span class="text-muted small" id="treatmentParseHint">
+                            Система найдёт препараты в каталоге и добавит их в рецепт
+                        </span>
+                    </div>
+                </div>
+
+                <div class="panel-box">
                     <div class="panel-title">Действия</div>
                     <div class="actions-bar">
                         <button class="btn btn-sm btn-primary" id="printBtn"><i class="fa-solid fa-print me-1"></i>Печать</button>
