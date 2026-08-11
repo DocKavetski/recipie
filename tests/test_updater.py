@@ -42,7 +42,7 @@ def test_get_update_status_via_git(monkeypatch):
         "remote_head_commit",
         lambda: {"sha": "abc123456789ffff", "message": "same tip", "date": ""},
     )
-    monkeypatch.setattr(updater, "remote_version_file", lambda: "1.1.2")
+    monkeypatch.setattr(updater, "remote_version_file", lambda: "1.1.3")
     monkeypatch.setattr(updater, "latest_release_asset", lambda: None)
     status = updater.get_update_status()
     assert status["ok"] is True

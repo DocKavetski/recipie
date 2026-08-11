@@ -44,6 +44,42 @@ function setStatus(message) {
     statusText.textContent = message;
 }
 
+async function copyTextToClipboard(text) {
+    const value = String(text || "");
+    if (!value) {
+        return false;
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+        return true;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        return document.execCommand("copy");
+    } finally {
+        document.body.removeChild(textarea);
+    }
+}
+
+function buildSchemeClipboardText(drugs) {
+    return drugs
+        .filter((drug) => drug.mnn)
+        .map((drug) => {
+            const title = drug.russian_name || drug.mnn;
+            const head = [drug.drug_form, title, drug.dosage].filter(Boolean).join(" ").trim();
+            const scheme = String(drug.selectedScheme || "").trim();
+            return scheme ? `${head} — ${scheme}` : head;
+        })
+        .filter(Boolean);
+}
+
 function syncDoctorInputs(value) {
     recipeDoctorInput.value = value || "";
     settingsDoctorInput.value = value || "";
@@ -1651,13 +1687,34 @@ async function bindFormActions() {
         }
     });
 
-    showSchemeBtn.addEventListener("click", () => {
-        const lines = getFormState().drugs
-            .filter((drug) => drug.mnn)
-            .map((drug) => `${drug.drug_form} ${drug.russian_name} / ${drug.mnn} ${drug.dosage} ${drug.selectedScheme || ""}`.trim());
+    if (showSchemeBtn) {
+        showSchemeBtn.addEventListener("click", async () => {
+            const drugs = getFormState().drugs.filter((drug) => drug.mnn);
+            if (!drugs.length) {
+                setStatus("Нет заполненных препаратов для копирования схемы.");
+                return;
+            }
 
-        window.alert(lines.length ? lines.join("\n") : "Нет заполненных препаратов.");
-    });
+            const lines = buildSchemeClipboardText(drugs);
+            const missingScheme = drugs.filter((drug) => !String(drug.selectedScheme || "").trim()).length;
+
+            try {
+                const copied = await copyTextToClipboard(lines.join("\n"));
+                if (!copied) {
+                    setStatus("Не удалось скопировать схему в буфер обмена.");
+                    return;
+                }
+                if (missingScheme) {
+                    setStatus(`Схема скопирована (${lines.length} строк). У ${missingScheme} препарата схема не указана.`);
+                } else {
+                    setStatus(`Схема скопирована в буфер обмена (${lines.length}).`);
+                }
+            } catch (error) {
+                console.error(error);
+                setStatus("Не удалось скопировать схему в буфер обмена.");
+            }
+        });
+    }
 }
 
 async function initPrototype() {
