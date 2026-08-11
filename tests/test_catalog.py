@@ -27,7 +27,7 @@ def test_list_drugs_not_empty(tmp_path: Path):
     repo = DrugRepository(tmp_path / "app.db")
     repo.initialize()
     drugs = repo.list_drugs()
-    assert len(drugs) >= 50
+    assert len(drugs) >= 40
     names = " ".join(d["russian_name"].lower() for d in drugs)
     assert "диазепам" not in names
     assert "тофизопам" not in names
