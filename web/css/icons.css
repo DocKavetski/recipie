@@ -25,6 +25,10 @@
   content: "\2B07";
 }
 
+.fa-power-off::before {
+  content: "\23FB";
+}
+
 .fa-xmark::before {
   content: "\2715";
 }

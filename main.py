@@ -1,5 +1,6 @@
 import logging
 import sys
+import threading
 from pathlib import Path
 
 
@@ -20,6 +21,7 @@ from backend.db import DrugRepository
 from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
 from backend.pdf_gen import generate_prescription_pdf
 from backend.print_preview import build_preview_context
+from backend.runtime_control import build_restart_command, hard_exit, spawn_restart
 from backend.settings import SettingsStore
 from backend.tabletka import availability_to_dict, check_availability_minsk, search_tabletka
 from backend.updater import apply_update, cleanup_update_artifacts, get_update_status, open_repo_in_browser
@@ -88,6 +90,29 @@ def update_application():
             result["catalog_synced"] = False
             result["catalog_error"] = str(exc)
     return result
+
+
+def _restart_process_after_response(delay_sec: float = 0.35) -> None:
+    def _do_restart() -> None:
+        command = build_restart_command(
+            frozen=getattr(sys, "frozen", False),
+            executable=sys.executable,
+            script_path=str(Path(__file__).resolve()),
+        )
+        spawn_restart(command, cwd=str(writable_path()))
+        hard_exit(0)
+
+    threading.Timer(delay_sec, _do_restart).start()
+
+
+@eel.expose
+def restart_application():
+    try:
+        _restart_process_after_response()
+        return {"ok": True, "message": "Приложение перезапускается…"}
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).exception("restart failed")
+        return {"ok": False, "message": str(exc)}
 
 
 @eel.expose

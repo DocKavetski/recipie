@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from backend import updater
+from backend.runtime_control import build_restart_command
 from backend.version import APP_VERSION, GITHUB_REPO
 
 
@@ -103,3 +104,21 @@ def test_cleanup_update_artifacts(tmp_path):
     old.write_bytes(b"x")
     updater.cleanup_update_artifacts(tmp_path)
     assert not old.exists()
+
+
+def test_build_restart_command_for_source():
+    command = build_restart_command(
+        frozen=False,
+        executable="/usr/bin/python3",
+        script_path="/workspace/main.py",
+    )
+    assert command == ["/usr/bin/python3", "/workspace/main.py"]
+
+
+def test_build_restart_command_for_frozen():
+    command = build_restart_command(
+        frozen=True,
+        executable="C:/Recepty/Recepty.exe",
+        script_path="/workspace/main.py",
+    )
+    assert command == ["C:/Recepty/Recepty.exe"]

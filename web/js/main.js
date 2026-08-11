@@ -31,6 +31,7 @@ const appUpdateStatus = document.getElementById("appUpdateStatus");
 const topbarVersion = document.getElementById("topbarVersion");
 const checkUpdateBtn = document.getElementById("checkUpdateBtn");
 const applyUpdateBtn = document.getElementById("applyUpdateBtn");
+const restartAppBtn = document.getElementById("restartAppBtn");
 const openRepoBtn = document.getElementById("openRepoBtn");
 
 let catalogDrugs = [...fallbackCatalog];
@@ -40,6 +41,7 @@ let searchMatches = [];
 let searchActiveIndex = 0;
 let latestUpdateStatus = null;
 let printBlankCssText = "";
+let autoUpdateStarted = false;
 
 const DUPLEX_BACK_SLOT = [1, 0, 3, 2];
 const PRINT_CUT_MARKS_HTML = `
@@ -1691,7 +1693,8 @@ async function initPrototype() {
     await loadSettingsFromBackend();
     await refreshTemplates();
     renderDirectoryTable();
-    await refreshUpdateStatus({ silent: true });
+    const startupUpdateStatus = await refreshUpdateStatus({ silent: true });
+    await maybeAutoApplyStartupUpdate(startupUpdateStatus);
 
     const refreshAvailabilityBtn = document.getElementById("refreshAvailabilityBtn");
     if (refreshAvailabilityBtn) {
@@ -1730,6 +1733,9 @@ function renderUpdateStatus(status) {
     if (applyUpdateBtn) {
         applyUpdateBtn.disabled = !status?.update_available;
     }
+    if (restartAppBtn) {
+        restartAppBtn.disabled = false;
+    }
 }
 
 async function refreshUpdateStatus(options = {}) {
@@ -1763,53 +1769,113 @@ async function refreshUpdateStatus(options = {}) {
     }
 }
 
+function setUpdateControlsBusy(isBusy) {
+    if (checkUpdateBtn) {
+        checkUpdateBtn.disabled = isBusy;
+    }
+    if (applyUpdateBtn) {
+        applyUpdateBtn.disabled = isBusy || !latestUpdateStatus?.update_available;
+    }
+    if (restartAppBtn) {
+        restartAppBtn.disabled = isBusy;
+    }
+}
+
+async function applyUpdateFlow(options = {}) {
+    const interactive = options.interactive !== false;
+    if (!latestUpdateStatus?.update_available) {
+        if (interactive) {
+            setStatus("Обновление не требуется.");
+        }
+        return null;
+    }
+    if (interactive) {
+        const confirmed = window.confirm(
+            "Обновить приложение с GitHub?\n\nЛокальные настройки, история и база пациентов сохранятся. После обновления нужно перезапустить программу.",
+        );
+        if (!confirmed) {
+            return null;
+        }
+    }
+
+    setUpdateControlsBusy(true);
+    setStatus(options.startMessage || "Скачиваю и устанавливаю обновление…");
+    try {
+        const result = await window.eel.update_application()();
+        renderUpdateStatus(result.status || {
+            ok: result.ok,
+            app_version: result.app_version,
+            update_available: false,
+            message: result.message,
+        });
+        if (result.updated && result.needs_restart) {
+            const suffix = interactive
+                ? " Нажмите «Перезагрузить приложение»."
+                : " Обновление установлено автоматически, нажмите «Перезагрузить приложение».";
+            setStatus(`${result.message || "Обновление установлено."}${suffix}`);
+        } else {
+            setStatus(result.message || "Готово.");
+        }
+        return result;
+    } catch (error) {
+        console.error(error);
+        setStatus("Ошибка при обновлении приложения.");
+        return null;
+    } finally {
+        setUpdateControlsBusy(false);
+    }
+}
+
+async function maybeAutoApplyStartupUpdate(status) {
+    if (autoUpdateStarted || !status?.update_available || !window.eel || typeof window.eel.update_application !== "function") {
+        return null;
+    }
+    autoUpdateStarted = true;
+    return applyUpdateFlow({
+        interactive: false,
+        startMessage: `Найдено обновление ${status.remote_version || ""}. Устанавливаю автоматически…`.trim(),
+    });
+}
+
 function bindUpdateControls() {
     if (checkUpdateBtn && !checkUpdateBtn.dataset.bound) {
         checkUpdateBtn.addEventListener("click", async () => {
-            checkUpdateBtn.disabled = true;
+            setUpdateControlsBusy(true);
             setStatus("Проверяю обновления на GitHub…");
             await refreshUpdateStatus();
-            checkUpdateBtn.disabled = false;
+            setUpdateControlsBusy(false);
         });
         checkUpdateBtn.dataset.bound = "true";
     }
 
     if (applyUpdateBtn && !applyUpdateBtn.dataset.bound) {
         applyUpdateBtn.addEventListener("click", async () => {
-            if (!latestUpdateStatus?.update_available) {
-                setStatus("Обновление не требуется.");
+            await applyUpdateFlow({ interactive: true });
+        });
+        applyUpdateBtn.dataset.bound = "true";
+    }
+
+    if (restartAppBtn && !restartAppBtn.dataset.bound) {
+        restartAppBtn.addEventListener("click", async () => {
+            if (!window.eel || typeof window.eel.restart_application !== "function") {
+                window.location.reload();
                 return;
             }
-            const confirmed = window.confirm(
-                "Обновить приложение с GitHub?\n\nЛокальные настройки, история и база пациентов сохранятся. После обновления нужно перезапустить программу.",
-            );
-            if (!confirmed) {
-                return;
-            }
-            applyUpdateBtn.disabled = true;
-            checkUpdateBtn.disabled = true;
-            setStatus("Скачиваю и устанавливаю обновление…");
+            restartAppBtn.disabled = true;
+            setStatus("Перезапускаю приложение…");
             try {
-                const result = await window.eel.update_application()();
-                renderUpdateStatus(result.status || {
-                    ok: result.ok,
-                    app_version: result.app_version,
-                    update_available: false,
-                    message: result.message,
-                });
-                setStatus(result.message || "Готово.");
-                if (result.updated && result.needs_restart) {
-                    window.alert(result.message);
+                const result = await window.eel.restart_application()();
+                if (!result?.ok) {
+                    restartAppBtn.disabled = false;
+                    setStatus(result?.message || "Не удалось перезапустить приложение.");
                 }
             } catch (error) {
                 console.error(error);
-                setStatus("Ошибка при обновлении приложения.");
-                applyUpdateBtn.disabled = !latestUpdateStatus?.update_available;
-            } finally {
-                checkUpdateBtn.disabled = false;
+                restartAppBtn.disabled = false;
+                setStatus("Не удалось перезапустить приложение.");
             }
         });
-        applyUpdateBtn.dataset.bound = "true";
+        restartAppBtn.dataset.bound = "true";
     }
 
     if (openRepoBtn && !openRepoBtn.dataset.bound) {
@@ -1818,11 +1884,11 @@ function bindUpdateControls() {
                 if (window.eel && typeof window.eel.open_github_repo === "function") {
                     await window.eel.open_github_repo()();
                 } else {
-                    window.open("https://github.com/DocKavetski/recipies", "_blank");
+                    window.open("https://github.com/DocKavetski/recipie", "_blank");
                 }
             } catch (error) {
                 console.error(error);
-                window.open("https://github.com/DocKavetski/recipies", "_blank");
+                window.open("https://github.com/DocKavetski/recipie", "_blank");
             }
         });
         openRepoBtn.dataset.bound = "true";
