@@ -338,6 +338,63 @@ function applyTradePackagingToRow(row, options = {}) {
     if (!match) {
         return false;
     }
+    return applyPackagingMatchToRow(row, match, options);
+}
+
+function resolveMnnPackaging(tradeDetails, dosage, fallbackPackaging = "") {
+    const dose = String(dosage || "").trim();
+    const normalizedDose = normalizeTreatmentDose(dose);
+    let best = null;
+    let bestQty = -1;
+
+    for (const entry of Object.values(tradeDetails || {})) {
+        let candidate = null;
+        if (isNestedTradeDetails(entry)) {
+            if (dose && entry[dose]) {
+                candidate = entry[dose];
+            } else {
+                for (const [key, details] of Object.entries(entry)) {
+                    if (normalizeTreatmentDose(key) === normalizedDose) {
+                        candidate = details;
+                        break;
+                    }
+                }
+            }
+        } else if (entry) {
+            const entryDose = String(entry.dosage || "").trim();
+            if (!entryDose || !dose || normalizeTreatmentDose(entryDose) === normalizedDose) {
+                candidate = entry;
+            }
+        }
+        if (!candidate) {
+            continue;
+        }
+        const qty = Number(candidate.dispense_qty) || extractDefaultDispenseQty(candidate.packaging);
+        if (qty > bestQty) {
+            bestQty = qty;
+            best = candidate;
+        }
+    }
+
+    if (best) {
+        return best;
+    }
+    const fallback = String(fallbackPackaging || "").trim();
+    if (!fallback) {
+        return null;
+    }
+    return {
+        packaging: fallback,
+        dispense_qty: extractDefaultDispenseQty(fallback),
+    };
+}
+
+function applyPackagingMatchToRow(row, match, options = {}) {
+    const packagingInput = row.querySelector(".drug-packaging-input");
+    const dispenseInput = row.querySelector(".drug-dispense-input");
+    if (!packagingInput || !dispenseInput || !match) {
+        return false;
+    }
     const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
     packagingInput.value = match.packaging || packagingInput.value;
     if (!options.keepDispenseQty) {
@@ -345,6 +402,21 @@ function applyTradePackagingToRow(row, options = {}) {
     }
     syncDispenseConstraints(row, options.stepChange ? { stepChange: true, previousStep } : {});
     return true;
+}
+
+function applyMnnPackagingToRow(row, options = {}) {
+    const dosageSelect = row.querySelector(".drug-dosage-select");
+    const packagingInput = row.querySelector(".drug-packaging-input");
+    if (!dosageSelect || !packagingInput) {
+        return false;
+    }
+    const tradeDetails = JSON.parse(row.dataset.tradeDetails || "{}");
+    const fallback = row.dataset.defaultPackaging || packagingInput.value || "";
+    const match = resolveMnnPackaging(tradeDetails, dosageSelect.value, fallback);
+    if (!match) {
+        return false;
+    }
+    return applyPackagingMatchToRow(row, match, options);
 }
 
 function dispenseStepByPackaging(packaging) {
@@ -1211,9 +1283,15 @@ function syncTradeAvailability(row, announceChange) {
     tradeSelect.disabled = !isTradeMode;
 
     if (announceChange) {
-        setStatus(isTradeMode
-            ? "Режим выписки переключен на торговое название."
-            : "Режим выписки переключен на МНН.");
+        const packagingOptions = { stepChange: true };
+        if (isTradeMode) {
+            applyTradePackagingToRow(row, packagingOptions);
+            setStatus("Режим выписки переключен на торговое название.");
+        } else {
+            applyMnnPackagingToRow(row, packagingOptions);
+            setStatus("Режим выписки переключен на МНН — подставлена максимальная фасовка для дозировки.");
+        }
+        scheduleAutosave();
     }
 }
 
@@ -1390,7 +1468,12 @@ function bindFormDosageSelects(row) {
     }
     if (!dosageSelect.dataset.bound) {
         dosageSelect.addEventListener("change", () => {
-            applyTradePackagingToRow(row, { stepChange: true, keepDispenseQty: true });
+            const isTradeMode = row.querySelector(".drug-mode-select")?.value === "trade";
+            if (isTradeMode) {
+                applyTradePackagingToRow(row, { stepChange: true, keepDispenseQty: true });
+            } else {
+                applyMnnPackagingToRow(row, { stepChange: true });
+            }
             scheduleAutosave();
         });
         dosageSelect.dataset.bound = "true";
@@ -1407,6 +1490,7 @@ function bindRowRemoval(row) {
 
 function populateRow(row, drug, options = {}) {
     row.dataset.tradeDetails = JSON.stringify(drug.trade_details || {});
+    row.dataset.defaultPackaging = drug.packaging || "";
     const formOptions = drug.form_options?.length
         ? drug.form_options
         : (drug.drug_form ? [drug.drug_form] : ["Tab."]);
@@ -1442,7 +1526,10 @@ function populateRow(row, drug, options = {}) {
         options.selectedScheme || drug.selectedScheme || drug.scheme_options?.[0] || "",
     );
 
-    const selectedDetails = resolveTradePackaging(drug.trade_details || {}, selectedTrade, selectedDosage);
+    const rowMode = options.mode || (selectedTrade ? "trade" : "mnn");
+    const selectedDetails = rowMode === "trade" && selectedTrade
+        ? resolveTradePackaging(drug.trade_details || {}, selectedTrade, selectedDosage)
+        : resolveMnnPackaging(drug.trade_details || {}, selectedDosage, drug.packaging || "");
     if (selectedDetails && !hasExplicitDispense) {
         // Не перетираем № из разбора дневника (например №90) фасовкой торгового.
         row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;

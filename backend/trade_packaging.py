@@ -111,3 +111,60 @@ def resolve_trade_packaging(
     if entry_dose and dose and _normalize_dosage(entry_dose) != normalized_dose:
         return None
     return dict(entry)
+
+
+def _entry_for_dosage(entry: dict[str, Any], dosage: str) -> dict[str, Any] | None:
+    if not isinstance(entry, dict) or not entry:
+        return None
+    dose = str(dosage or "").strip()
+    normalized_dose = _normalize_dosage(dose)
+    if _is_nested_trade_entry(entry):
+        if dose and dose in entry and isinstance(entry[dose], dict):
+            return dict(entry[dose])
+        for key, details in entry.items():
+            if _normalize_dosage(key) == normalized_dose and isinstance(details, dict):
+                return dict(details)
+        return None
+    entry_dose = str(entry.get("dosage") or "").strip()
+    if entry_dose and dose and _normalize_dosage(entry_dose) != normalized_dose:
+        return None
+    return dict(entry)
+
+
+def _pack_qty(details: dict[str, Any] | None) -> int:
+    if not isinstance(details, dict):
+        return 0
+    qty = details.get("dispense_qty")
+    if qty is not None:
+        try:
+            return int(qty)
+        except (TypeError, ValueError):
+            pass
+    packaging = str(details.get("packaging") or "")
+    match = re.search(r"(\d+)", packaging)
+    return int(match.group(1)) if match else 0
+
+
+def resolve_mnn_packaging(
+    trade_details: dict[str, Any] | None,
+    dosage: str = "",
+    fallback_packaging: str = "",
+) -> dict[str, Any] | None:
+    """Для режима МНН — максимальная фасовка среди торговых вариантов на эту дозу."""
+    best: dict[str, Any] | None = None
+    best_qty = -1
+    if isinstance(trade_details, dict):
+        for entry in trade_details.values():
+            candidate = _entry_for_dosage(entry, dosage) if isinstance(entry, dict) else None
+            if not isinstance(candidate, dict):
+                continue
+            qty = _pack_qty(candidate)
+            if qty > best_qty:
+                best_qty = qty
+                best = candidate
+    if best:
+        return dict(best)
+    fallback = str(fallback_packaging or "").strip()
+    if fallback:
+        return {"packaging": fallback, "dispense_qty": _pack_qty({"packaging": fallback})}
+    return None
