@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from backend.trade_packaging import normalize_trade_details, trade_details_from_variants
+
 BENZO_MARKERS = (
     "диазепам", "diazepam", "феназепам", "phenazepam", "клоназепам", "clonazepam",
     "алпразолам", "alprazolam", "лоразепам", "lorazepam",
@@ -196,11 +198,16 @@ def normalize_seed_item(item: dict[str, Any]) -> dict[str, Any] | None:
         dosage = mapped[0]
 
     trade_details = item.get("trade_details") or {}
+    variants = (item.get("tabletka") or {}).get("variants") or []
+    if variants:
+        trade_details = trade_details_from_variants(variants)
+    else:
+        trade_details = normalize_trade_details(trade_details)
     if not trade_details and trade_names:
-        trade_details = {
-            name: {"packaging": packaging, "dispense_qty": dispense_qty}
+        trade_details = normalize_trade_details({
+            name: {"packaging": packaging, "dispense_qty": dispense_qty, "dosage": dosage}
             for name in trade_names
-        }
+        })
 
     return {
         "category": _normalize_category(item.get("category", "")),

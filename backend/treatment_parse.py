@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from backend.trade_packaging import resolve_trade_packaging
+
 
 _SKIP_LINE = re.compile(
     r"^(?:"
@@ -317,7 +319,7 @@ def drug_payload_from_match(
     packaging = drug.get("packaging") or ""
     trade_details = drug.get("trade_details") or {}
     if selected_trade and isinstance(trade_details, dict):
-        selected_details = trade_details.get(selected_trade) or {}
+        selected_details = resolve_trade_packaging(trade_details, selected_trade, dose) or {}
         packaging = selected_details.get("packaging") or packaging
     payload = {
         "mnn": drug.get("mnn"),

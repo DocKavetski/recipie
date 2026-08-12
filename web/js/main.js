@@ -292,6 +292,61 @@ function extractDefaultDispenseQty(packaging) {
     return match ? Number(match[0]) : 1;
 }
 
+function isNestedTradeDetails(entry) {
+    return Boolean(entry && typeof entry === "object" && !("packaging" in entry) && !("dispense_qty" in entry));
+}
+
+function resolveTradePackaging(tradeDetails, trade, dosage) {
+    const tradeName = String(trade || "").trim();
+    if (!tradeName || !tradeDetails || typeof tradeDetails !== "object") {
+        return null;
+    }
+    const entry = tradeDetails[tradeName];
+    if (!entry || typeof entry !== "object") {
+        return null;
+    }
+    const dose = String(dosage || "").trim();
+    const normalizedDose = normalizeTreatmentDose(dose);
+    if (isNestedTradeDetails(entry)) {
+        if (dose && entry[dose]) {
+            return entry[dose];
+        }
+        for (const [key, details] of Object.entries(entry)) {
+            if (normalizeTreatmentDose(key) === normalizedDose) {
+                return details;
+            }
+        }
+        return null;
+    }
+    const entryDose = String(entry.dosage || "").trim();
+    if (entryDose && dose && normalizeTreatmentDose(entryDose) !== normalizedDose) {
+        return null;
+    }
+    return entry;
+}
+
+function applyTradePackagingToRow(row, options = {}) {
+    const tradeSelect = row.querySelector(".drug-trade-select");
+    const dosageSelect = row.querySelector(".drug-dosage-select");
+    const packagingInput = row.querySelector(".drug-packaging-input");
+    const dispenseInput = row.querySelector(".drug-dispense-input");
+    if (!tradeSelect || !dosageSelect || !packagingInput || !dispenseInput) {
+        return false;
+    }
+    const tradeDetails = JSON.parse(row.dataset.tradeDetails || "{}");
+    const match = resolveTradePackaging(tradeDetails, tradeSelect.value, dosageSelect.value);
+    if (!match) {
+        return false;
+    }
+    const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
+    packagingInput.value = match.packaging || packagingInput.value;
+    if (!options.keepDispenseQty) {
+        dispenseInput.value = match.dispense_qty || extractDefaultDispenseQty(match.packaging);
+    }
+    syncDispenseConstraints(row, options.stepChange ? { stepChange: true, previousStep } : {});
+    return true;
+}
+
 function dispenseStepByPackaging(packaging) {
     const packQty = extractDefaultDispenseQty(packaging);
     // Правило из практики:
@@ -1177,7 +1232,11 @@ function bindTradeSelect(row) {
         tradeSelect.addEventListener("change", () => {
             const details = JSON.parse(row.dataset.tradeDetails || "{}");
             const selectedTrade = tradeSelect.value;
-            const selectedDetails = details[selectedTrade];
+            const selectedDetails = resolveTradePackaging(
+                details,
+                selectedTrade,
+                row.querySelector(".drug-dosage-select")?.value || "",
+            );
 
             if (selectedDetails) {
                 const packagingInput = row.querySelector(".drug-packaging-input");
@@ -1186,8 +1245,6 @@ function bindTradeSelect(row) {
                     return;
                 }
 
-                // Пытаемся сохранить текущее значение D.t.d. и округлить его
-                // по направлению при смене фасовки (28→30 вверх, 30→28 вниз).
                 const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
 
                 packagingInput.value = selectedDetails.packaging || packagingInput.value;
@@ -1195,12 +1252,11 @@ function bindTradeSelect(row) {
                 const numeric = Number.parseInt(String(dispenseInput.value || "").trim(), 10);
                 const hasValidNumber = Number.isFinite(numeric) && numeric > 0;
                 if (!hasValidNumber) {
-                    // Если значение пустое/битое — берём дефолт из trade_details.
                     dispenseInput.value = selectedDetails.dispense_qty || dispenseInput.value;
                 }
 
                 syncDispenseConstraints(row, { stepChange: true, previousStep });
-                setStatus(`Для торгового названия ${selectedTrade} подставлены упаковка и количество.`);
+                setStatus(`Для ${selectedTrade} ${row.querySelector(".drug-dosage-select")?.value || ""} подставлены упаковка и количество.`.trim());
             }
         });
         tradeSelect.dataset.bound = "true";
@@ -1334,6 +1390,7 @@ function bindFormDosageSelects(row) {
     }
     if (!dosageSelect.dataset.bound) {
         dosageSelect.addEventListener("change", () => {
+            applyTradePackagingToRow(row, { stepChange: true, keepDispenseQty: true });
             scheduleAutosave();
         });
         dosageSelect.dataset.bound = "true";
@@ -1385,7 +1442,7 @@ function populateRow(row, drug, options = {}) {
         options.selectedScheme || drug.selectedScheme || drug.scheme_options?.[0] || "",
     );
 
-    const selectedDetails = (drug.trade_details || {})[selectedTrade];
+    const selectedDetails = resolveTradePackaging(drug.trade_details || {}, selectedTrade, selectedDosage);
     if (selectedDetails && !hasExplicitDispense) {
         // Не перетираем № из разбора дневника (например №90) фасовкой торгового.
         row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;
@@ -2269,8 +2326,9 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
         // а D.t.d. (№...) — это именно количество, а не фасовка.
         let packaging = drug.packaging || "";
         const tradeDetails = drug.trade_details || {};
-        if (selectedTrade && tradeDetails && tradeDetails[selectedTrade]?.packaging) {
-            packaging = tradeDetails[selectedTrade].packaging;
+        if (selectedTrade && tradeDetails) {
+            const selectedDetails = resolveTradePackaging(tradeDetails, selectedTrade, dosage);
+            packaging = selectedDetails?.packaging || packaging;
         }
         const payload = {
             ...drug,

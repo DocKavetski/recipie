@@ -265,14 +265,13 @@ def rows_to_enrichment(query: str, rows: list[dict[str, Any]], mnn_id: str | Non
             form_dosage[drug_form].append(dosage)
         if trade and trade not in trade_names:
             trade_names.append(trade)
-        if trade:
-            prev = trade_details.get(trade)
-            if not prev or dispense_qty >= int(prev.get("dispense_qty") or 0):
-                trade_details[trade] = {
+        if trade and dosage:
+            trade_bucket = trade_details.setdefault(trade, {})
+            if isinstance(trade_bucket, dict):
+                trade_bucket[dosage] = {
                     "packaging": packaging or f"N{dispense_qty}",
                     "dispense_qty": dispense_qty,
                     "form": drug_form,
-                    "dosage": dosage,
                 }
         if packaging:
             pack_counts[packaging] = pack_counts.get(packaging, 0) + 1

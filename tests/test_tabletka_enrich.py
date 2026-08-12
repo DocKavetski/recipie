@@ -5,6 +5,7 @@ from __future__ import annotations
 from bs4 import BeautifulSoup
 
 from backend.seed_loader import load_seed_drugs
+from backend.trade_packaging import resolve_trade_packaging
 from backend.tabletka_enrich import (
     classify_form,
     parse_dosage,
@@ -50,6 +51,7 @@ def test_rows_to_enrichment_venlafaxine_like():
     assert enrichment.form_dosage_map["Caps."] == ["75 мг", "150 мг"]
     assert "Велаксин" in enrichment.trade_names
     assert "Алвента" in enrichment.trade_names
+    assert enrichment.trade_details["Велаксин"]["75 мг"]["packaging"] == "N28"
     assert "225 мг" not in enrichment.dosage_options
 
 
