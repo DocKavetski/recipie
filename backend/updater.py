@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import ssl
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
@@ -74,14 +75,31 @@ def _http_json(url: str, timeout: int = 20) -> Any:
             "Accept": "application/vnd.github+json",
         },
     )
-    with urlopen(request, timeout=timeout) as response:
+    with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def _http_bytes(url: str, timeout: int = 60) -> bytes:
     request = Request(url, headers={"User-Agent": "RecipieUpdater/1.1"})
-    with urlopen(request, timeout=timeout) as response:
+    with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
         return response.read()
+
+
+def _ssl_context() -> ssl.SSLContext | None:
+    """
+    Возвращает SSLContext с корректными CA.
+
+    На некоторых окружениях сломаны/отсутствуют системные сертификаты, и тогда
+    urlopen падает с "CERTIFICATE_VERIFY_FAILED".
+    """
+    try:
+        import certifi  # type: ignore
+
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        return ctx
+    except Exception:
+        # Если certifi недоступен — полагаемся на системный дефолт.
+        return None
 
 
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
