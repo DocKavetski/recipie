@@ -1176,9 +1176,26 @@ function bindTradeSelect(row) {
             const selectedDetails = details[selectedTrade];
 
             if (selectedDetails) {
-                row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;
-                row.querySelector(".drug-dispense-input").value = selectedDetails.dispense_qty || row.querySelector(".drug-dispense-input").value;
-                syncDispenseConstraints(row);
+                const packagingInput = row.querySelector(".drug-packaging-input");
+                const dispenseInput = row.querySelector(".drug-dispense-input");
+                if (!packagingInput || !dispenseInput) {
+                    return;
+                }
+
+                // Пытаемся сохранить текущее значение D.t.d. и округлить его
+                // по направлению при смене фасовки (28→30 вверх, 30→28 вниз).
+                const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
+
+                packagingInput.value = selectedDetails.packaging || packagingInput.value;
+
+                const numeric = Number.parseInt(String(dispenseInput.value || "").trim(), 10);
+                const hasValidNumber = Number.isFinite(numeric) && numeric > 0;
+                if (!hasValidNumber) {
+                    // Если значение пустое/битое — берём дефолт из trade_details.
+                    dispenseInput.value = selectedDetails.dispense_qty || dispenseInput.value;
+                }
+
+                syncDispenseConstraints(row, { stepChange: true, previousStep });
                 setStatus(`Для торгового названия ${selectedTrade} подставлены упаковка и количество.`);
             }
         });
