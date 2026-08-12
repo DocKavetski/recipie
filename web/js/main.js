@@ -292,6 +292,42 @@ function extractDefaultDispenseQty(packaging) {
     return match ? Number(match[0]) : 1;
 }
 
+function dispenseStepByPackaging(packaging) {
+    const packQty = extractDefaultDispenseQty(packaging);
+    if (packQty === 28) {
+        return 14;
+    }
+    if (packQty === 30) {
+        return 10;
+    }
+    return 1;
+}
+
+function nearestMultiple(value, step) {
+    const numeric = Number.parseInt(String(value || "").trim(), 10);
+    if (!Number.isFinite(numeric) || numeric < 1) {
+        return step;
+    }
+    if (step <= 1) {
+        return numeric;
+    }
+    return Math.max(step, Math.round(numeric / step) * step);
+}
+
+function syncDispenseConstraints(row, options = {}) {
+    const packagingInput = row.querySelector(".drug-packaging-input");
+    const dispenseInput = row.querySelector(".drug-dispense-input");
+    if (!packagingInput || !dispenseInput) {
+        return;
+    }
+    const step = dispenseStepByPackaging(packagingInput.value);
+    dispenseInput.step = String(step);
+    dispenseInput.min = String(step > 1 ? step : 1);
+    if (options.normalizeValue !== false) {
+        dispenseInput.value = nearestMultiple(dispenseInput.value, step);
+    }
+}
+
 function openPrintPreview(state, pdfPath = "", preview = null) {
     const previewModel = normalizePreviewData(state, preview);
     const { stampHtml, todayLong, patientName, birthDate, doctorName, frontBatches, backFilledBatches, duplexBackSlot, unp } = previewModel;
@@ -1104,11 +1140,32 @@ function bindTradeSelect(row) {
             if (selectedDetails) {
                 row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;
                 row.querySelector(".drug-dispense-input").value = selectedDetails.dispense_qty || row.querySelector(".drug-dispense-input").value;
+                syncDispenseConstraints(row);
                 setStatus(`Для торгового названия ${selectedTrade} подставлены упаковка и количество.`);
             }
         });
         tradeSelect.dataset.bound = "true";
     }
+}
+
+function bindDispenseConstraints(row) {
+    const packagingInput = row.querySelector(".drug-packaging-input");
+    const dispenseInput = row.querySelector(".drug-dispense-input");
+    if (!packagingInput || !dispenseInput || dispenseInput.dataset.dispenseBound) {
+        return;
+    }
+    packagingInput.addEventListener("change", () => {
+        syncDispenseConstraints(row);
+        scheduleAutosave();
+    });
+    dispenseInput.addEventListener("change", () => {
+        syncDispenseConstraints(row);
+        scheduleAutosave();
+    });
+    dispenseInput.addEventListener("blur", () => {
+        syncDispenseConstraints(row);
+    });
+    dispenseInput.dataset.dispenseBound = "true";
 }
 
 function bindSchemeInput(row) {
@@ -1232,6 +1289,7 @@ function populateRow(row, drug, options = {}) {
         row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;
         row.querySelector(".drug-dispense-input").value = selectedDetails.dispense_qty || extractDefaultDispenseQty(selectedDetails.packaging);
     }
+    syncDispenseConstraints(row);
 }
 
 function hideSearchDropdown() {
@@ -1487,6 +1545,7 @@ function addDrugRow(drug = null, options = {}) {
     row.querySelector(".drug-mode-select").value = options.mode || "mnn";
     bindModeSelect(row);
     bindTradeSelect(row);
+    bindDispenseConstraints(row);
     bindFormDosageSelects(row);
     bindSchemeInput(row);
     bindRowRemoval(row);

@@ -225,6 +225,21 @@ class TestValidate:
         assert result.ok
         assert result.warnings
 
+    def test_warnings_for_dispense_step_by_packaging(self):
+        drugs = [
+            {
+                "mnn": "Escitalopram",
+                "drug_form": "Tab.",
+                "dosage": "10 мг",
+                "packaging": "N28",
+                "dispenseQty": 20,
+                "selectedScheme": "по 1 таблетке утром",
+            }
+        ]
+        result = validate_prescription_payload(self._payload(drugs=drugs))
+        assert result.ok
+        assert any("кратно 14" in warning for warning in result.warnings)
+
     def test_normalize_filters_empty_drugs(self):
         payload = self._payload(drugs=[{"mnn": ""}, {"mnn": "X", "dispenseQty": None}])
         normalized = normalize_prescription_payload(payload)

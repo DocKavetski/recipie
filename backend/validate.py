@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from backend.patient_parse import format_name_with_initials, normalize_birth_date, parse_birth_date
+from backend.numbers_ru import extract_default_dispense_qty
 
 
 @dataclass(frozen=True)
@@ -56,8 +57,16 @@ def validate_prescription_payload(payload: dict[str, Any] | None, *, require_car
             warnings.append(f"Препарат {index}: не выбрана схема.")
         qty = drug.get("dispenseQty")
         try:
-            if int(qty) < 1:
+            qty_num = int(qty)
+            if qty_num < 1:
                 warnings.append(f"Препарат {index}: количество D.t.d. меньше 1.")
+                continue
+            pack_qty = extract_default_dispense_qty(drug.get("packaging"))
+            step = 14 if pack_qty == 28 else 10 if pack_qty == 30 else 1
+            if step > 1 and qty_num % step != 0:
+                warnings.append(
+                    f"Препарат {index}: количество D.t.d. должно быть кратно {step} (фасовка {pack_qty})."
+                )
         except (TypeError, ValueError):
             warnings.append(f"Препарат {index}: некорректное количество D.t.d.")
 
