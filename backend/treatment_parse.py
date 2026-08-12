@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from backend.trade_packaging import resolve_trade_packaging
+from backend.trade_packaging import resolve_mnn_packaging, resolve_trade_packaging
 
 
 _SKIP_LINE = re.compile(
@@ -321,6 +321,9 @@ def drug_payload_from_match(
     if selected_trade and isinstance(trade_details, dict):
         selected_details = resolve_trade_packaging(trade_details, selected_trade, dose) or {}
         packaging = selected_details.get("packaging") or packaging
+    elif isinstance(trade_details, dict):
+        mnn_details = resolve_mnn_packaging(trade_details, dose, packaging) or {}
+        packaging = mnn_details.get("packaging") or packaging
     payload = {
         "mnn": drug.get("mnn"),
         "russian_name": drug.get("russian_name"),

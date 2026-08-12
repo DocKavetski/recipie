@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from backend.patient_parse import format_name_with_initials, normalize_birth_date, parse_birth_date
+from backend.dispense_rules import dispense_step_by_packaging
 from backend.numbers_ru import extract_default_dispense_qty
 
 
@@ -62,11 +63,7 @@ def validate_prescription_payload(payload: dict[str, Any] | None, *, require_car
                 warnings.append(f"Препарат {index}: количество D.t.d. меньше 1.")
                 continue
             pack_qty = extract_default_dispense_qty(drug.get("packaging"))
-            # Правило листания/кратности:
-            # - если фасовка кратна 14 → шаг 14
-            # - иначе если кратна 10 → шаг 10
-            # - иначе шаг 1
-            step = 14 if pack_qty % 14 == 0 else 10 if pack_qty % 10 == 0 else 1
+            step = dispense_step_by_packaging(drug.get("packaging"))
             if step > 1 and qty_num % step != 0:
                 errors.append(
                     f"Препарат {index}: количество D.t.d. должно быть кратно {step} (фасовка {pack_qty})."

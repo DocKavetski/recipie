@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.seed_loader import load_seed_drugs
+from backend.template_payload import normalize_template_payload
 
 
 LOGGER = logging.getLogger(__name__)
@@ -223,6 +224,10 @@ class DrugRepository:
         if not template_name:
             raise ValueError("Template name is required.")
 
+        normalized = normalize_template_payload(payload)
+        if not normalized["drugs"]:
+            raise ValueError("Template must contain at least one drug.")
+
         with self._connect() as connection:
             connection.execute(
                 """
@@ -232,7 +237,7 @@ class DrugRepository:
                     payload_json = excluded.payload_json,
                     created_at = CURRENT_TIMESTAMP
                 """,
-                (template_name, json.dumps(payload, ensure_ascii=False)),
+                (template_name, json.dumps(normalized, ensure_ascii=False)),
             )
             connection.commit()
         return {"ok": True}

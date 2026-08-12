@@ -287,219 +287,6 @@ function escapeHtml(value) {
         .replaceAll('"', "&quot;");
 }
 
-function extractDefaultDispenseQty(packaging) {
-    const match = String(packaging || "").match(/\d+/);
-    return match ? Number(match[0]) : 1;
-}
-
-function isNestedTradeDetails(entry) {
-    return Boolean(entry && typeof entry === "object" && !("packaging" in entry) && !("dispense_qty" in entry));
-}
-
-function resolveTradePackaging(tradeDetails, trade, dosage) {
-    const tradeName = String(trade || "").trim();
-    if (!tradeName || !tradeDetails || typeof tradeDetails !== "object") {
-        return null;
-    }
-    const entry = tradeDetails[tradeName];
-    if (!entry || typeof entry !== "object") {
-        return null;
-    }
-    const dose = String(dosage || "").trim();
-    const normalizedDose = normalizeTreatmentDose(dose);
-    if (isNestedTradeDetails(entry)) {
-        if (dose && entry[dose]) {
-            return entry[dose];
-        }
-        for (const [key, details] of Object.entries(entry)) {
-            if (normalizeTreatmentDose(key) === normalizedDose) {
-                return details;
-            }
-        }
-        return null;
-    }
-    const entryDose = String(entry.dosage || "").trim();
-    if (entryDose && dose && normalizeTreatmentDose(entryDose) !== normalizedDose) {
-        return null;
-    }
-    return entry;
-}
-
-function applyTradePackagingToRow(row, options = {}) {
-    const tradeSelect = row.querySelector(".drug-trade-select");
-    const dosageSelect = row.querySelector(".drug-dosage-select");
-    const packagingInput = row.querySelector(".drug-packaging-input");
-    const dispenseInput = row.querySelector(".drug-dispense-input");
-    if (!tradeSelect || !dosageSelect || !packagingInput || !dispenseInput) {
-        return false;
-    }
-    const tradeDetails = JSON.parse(row.dataset.tradeDetails || "{}");
-    const match = resolveTradePackaging(tradeDetails, tradeSelect.value, dosageSelect.value);
-    if (!match) {
-        return false;
-    }
-    return applyPackagingMatchToRow(row, match, options);
-}
-
-function resolveMnnPackaging(tradeDetails, dosage, fallbackPackaging = "") {
-    const dose = String(dosage || "").trim();
-    const normalizedDose = normalizeTreatmentDose(dose);
-    let best = null;
-    let bestQty = -1;
-
-    for (const entry of Object.values(tradeDetails || {})) {
-        let candidate = null;
-        if (isNestedTradeDetails(entry)) {
-            if (dose && entry[dose]) {
-                candidate = entry[dose];
-            } else {
-                for (const [key, details] of Object.entries(entry)) {
-                    if (normalizeTreatmentDose(key) === normalizedDose) {
-                        candidate = details;
-                        break;
-                    }
-                }
-            }
-        } else if (entry) {
-            const entryDose = String(entry.dosage || "").trim();
-            if (!entryDose || !dose || normalizeTreatmentDose(entryDose) === normalizedDose) {
-                candidate = entry;
-            }
-        }
-        if (!candidate) {
-            continue;
-        }
-        const qty = Number(candidate.dispense_qty) || extractDefaultDispenseQty(candidate.packaging);
-        if (qty > bestQty) {
-            bestQty = qty;
-            best = candidate;
-        }
-    }
-
-    if (best) {
-        return best;
-    }
-    const fallback = String(fallbackPackaging || "").trim();
-    if (!fallback) {
-        return null;
-    }
-    return {
-        packaging: fallback,
-        dispense_qty: extractDefaultDispenseQty(fallback),
-    };
-}
-
-function applyPackagingMatchToRow(row, match, options = {}) {
-    const packagingInput = row.querySelector(".drug-packaging-input");
-    const dispenseInput = row.querySelector(".drug-dispense-input");
-    if (!packagingInput || !dispenseInput || !match) {
-        return false;
-    }
-    const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
-    packagingInput.value = match.packaging || packagingInput.value;
-    if (!options.keepDispenseQty) {
-        dispenseInput.value = match.dispense_qty || extractDefaultDispenseQty(match.packaging);
-    }
-    syncDispenseConstraints(row, options.stepChange ? { stepChange: true, previousStep } : {});
-    return true;
-}
-
-function applyMnnPackagingToRow(row, options = {}) {
-    const dosageSelect = row.querySelector(".drug-dosage-select");
-    const packagingInput = row.querySelector(".drug-packaging-input");
-    if (!dosageSelect || !packagingInput) {
-        return false;
-    }
-    const tradeDetails = JSON.parse(row.dataset.tradeDetails || "{}");
-    const fallback = row.dataset.defaultPackaging || packagingInput.value || "";
-    const match = resolveMnnPackaging(tradeDetails, dosageSelect.value, fallback);
-    if (!match) {
-        return false;
-    }
-    return applyPackagingMatchToRow(row, match, options);
-}
-
-function dispenseStepByPackaging(packaging) {
-    const packQty = extractDefaultDispenseQty(packaging);
-    // Правило из практики:
-    // - если фасовка кратна 14 → листаем/округляем шагом 14
-    // - иначе если фасовка кратна 10 → шаг 10
-    // - иначе шаг 1
-    if (packQty % 14 === 0) {
-        return 14;
-    }
-    if (packQty % 10 === 0) {
-        return 10;
-    }
-    return 1;
-}
-
-function nearestMultiple(value, step) {
-    const numeric = Number.parseInt(String(value || "").trim(), 10);
-    if (!Number.isFinite(numeric) || numeric < 1) {
-        return step;
-    }
-    if (step <= 1) {
-        return numeric;
-    }
-    return Math.max(step, Math.round(numeric / step) * step);
-}
-
-function stepAlignedValue(value, step, direction = 0) {
-    const numeric = Number.parseInt(String(value || "").trim(), 10);
-    if (!Number.isFinite(numeric) || numeric < 1) {
-        return step > 1 ? step : 1;
-    }
-    if (step <= 1) {
-        return Math.max(1, numeric + direction);
-    }
-    if (direction > 0) {
-        return Math.max(step, Math.ceil(numeric / step) * step);
-    }
-    if (direction < 0) {
-        return Math.max(step, Math.floor(numeric / step) * step);
-    }
-    return nearestMultiple(numeric, step);
-}
-
-function roundDispenseForStepChange(value, previousStep, nextStep) {
-    const numeric = Number.parseInt(String(value || "").trim(), 10);
-    if (!Number.isFinite(numeric) || numeric < 1) {
-        return nextStep > 1 ? nextStep : 1;
-    }
-    if (nextStep <= 1) {
-        return Math.max(1, numeric);
-    }
-    if (previousStep > nextStep) {
-        return Math.max(nextStep, Math.ceil(numeric / nextStep) * nextStep);
-    }
-    if (previousStep < nextStep) {
-        return Math.max(nextStep, Math.floor(numeric / nextStep) * nextStep);
-    }
-    return nearestMultiple(numeric, nextStep);
-}
-
-function syncDispenseConstraints(row, options = {}) {
-    const packagingInput = row.querySelector(".drug-packaging-input");
-    const dispenseInput = row.querySelector(".drug-dispense-input");
-    if (!packagingInput || !dispenseInput) {
-        return;
-    }
-    const step = dispenseStepByPackaging(packagingInput.value);
-    dispenseInput.dataset.dispenseStep = String(step);
-    if (options.stepChange) {
-        const previousStep = Number.parseInt(String(options.previousStep || ""), 10) || 1;
-        dispenseInput.value = roundDispenseForStepChange(dispenseInput.value, previousStep, step);
-    } else if (options.normalizeValue !== false) {
-        const raw = String(dispenseInput.value || "").trim();
-        if (!raw) {
-            dispenseInput.value = String(step > 1 ? step : 1);
-        } else {
-            dispenseInput.value = nearestMultiple(dispenseInput.value, step);
-        }
-    }
-}
-
 function openPrintPreview(state, pdfPath = "", preview = null) {
     const previewModel = normalizePreviewData(state, preview);
     const { stampHtml, todayLong, patientName, birthDate, doctorName, frontBatches, backFilledBatches, duplexBackSlot, unp } = previewModel;
@@ -1344,55 +1131,6 @@ function bindTradeSelect(row) {
     }
 }
 
-function bindDispenseConstraints(row) {
-    const packagingInput = row.querySelector(".drug-packaging-input");
-    const dispenseInput = row.querySelector(".drug-dispense-input");
-    if (!packagingInput || !dispenseInput || dispenseInput.dataset.dispenseBound) {
-        return;
-    }
-    packagingInput.addEventListener("change", () => {
-        const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
-        syncDispenseConstraints(row, { stepChange: true, previousStep });
-        scheduleAutosave();
-    });
-    dispenseInput.addEventListener("focus", () => {
-        dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value || "");
-    });
-    dispenseInput.addEventListener("change", () => {
-        syncDispenseConstraints(row);
-        dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value || "");
-        scheduleAutosave();
-    });
-    dispenseInput.addEventListener("blur", () => {
-        syncDispenseConstraints(row);
-        dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value || "");
-        scheduleAutosave();
-    });
-    dispenseInput.addEventListener("keydown", (event) => {
-        const step = dispenseStepByPackaging(packagingInput.value);
-        if (step <= 1) {
-            return;
-        }
-        if (event.key === "ArrowUp") {
-            event.preventDefault();
-            const base = Number.parseInt(String(dispenseInput.value || "0"), 10) || 0;
-            dispenseInput.value = stepAlignedValue(base + step, step, 1);
-            dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
-            scheduleAutosave();
-            return;
-        }
-        if (event.key === "ArrowDown") {
-            event.preventDefault();
-            const base = Number.parseInt(String(dispenseInput.value || String(step)), 10) || step;
-            dispenseInput.value = stepAlignedValue(base - step, step, -1);
-            dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
-            scheduleAutosave();
-        }
-    });
-    dispenseInput.dataset.dispenseBound = "true";
-    dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value || "");
-}
-
 function bindSchemeInput(row) {
     const schemeInput = row.querySelector(".drug-scheme-input");
     if (!schemeInput || schemeInput.dataset.bound) {
@@ -2113,18 +1851,6 @@ function normalizeTreatmentMatchText(value) {
         .trim();
 }
 
-function normalizeTreatmentDose(value) {
-    const raw = String(value || "").trim().toLowerCase().replace(/ё/g, "е").replace(/,/g, ".");
-    const match = raw.match(/(?<!\d)(\d+(?:\.\d+)?)\s*(мг|mg|мкг|mcg|г|g)\.?/);
-    if (!match) {
-        return raw;
-    }
-    let amount = match[1].replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-    const unitMap = { mg: "мг", mcg: "мкг", g: "г" };
-    const unit = unitMap[match[2]] || match[2];
-    return `${amount} ${unit}`;
-}
-
 function buildTreatmentNameIndex(catalog) {
     const entries = [];
     const seen = new Set();
@@ -2397,15 +2123,9 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
         const dosage = pickTreatmentDosage(found.entry.drug, doseExtract.dosage || dose2.dosage, form);
         const drug = found.entry.drug;
         const selectedTrade = found.entry.kind === "trade" ? found.entry.display : "";
-
-        // Фасовка берётся из базы (и trade_details при режиме trade),
-        // а D.t.d. (№...) — это именно количество, а не фасовка.
-        let packaging = drug.packaging || "";
-        const tradeDetails = drug.trade_details || {};
-        if (selectedTrade && tradeDetails) {
-            const selectedDetails = resolveTradePackaging(tradeDetails, selectedTrade, dosage);
-            packaging = selectedDetails?.packaging || packaging;
-        }
+        const mode = selectedTrade ? "trade" : "mnn";
+        const packagingMatch = resolvePackagingForDrug(drug, mode, selectedTrade, dosage);
+        const packaging = packagingMatch?.packaging || drug.packaging || "";
         const payload = {
             ...drug,
             drug_form: form,
@@ -2414,7 +2134,7 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
             dispenseQty: packQty || undefined,
             selectedTrade,
             selectedScheme: cleanTreatmentSchemeLocal(scheme),
-            mode: selectedTrade ? "trade" : "mnn",
+            mode,
             matched_as: found.entry.display,
             match_kind: found.entry.kind,
         };
