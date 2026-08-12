@@ -171,3 +171,18 @@ def test_latin_scheme_copy_roundtrip(tmp_path: Path):
     assert result["drugs"][0]["mnn"] == "Fluvoxamine"
     assert result["drugs"][0]["dosage"] == "100 мг"
     assert "на ночь" in result["drugs"][0]["selectedScheme"]
+
+
+def test_duplicate_mnn_lines_are_preserved(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    text = (
+        "Венлафаксин 75 мг по 1 таб утром\n"
+        "Венлафаксин 150 мг по 1 таб вечером"
+    )
+    result = parse_treatment_text(text, catalog)
+    assert result["ok"] is True
+    assert len(result["drugs"]) == 2
+    assert result["drugs"][0]["mnn"] == "Venlafaxine"
+    assert result["drugs"][1]["mnn"] == "Venlafaxine"
+    assert result["drugs"][0]["dosage"] == "75 мг"
+    assert result["drugs"][1]["dosage"] == "150 мг"

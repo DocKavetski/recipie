@@ -217,7 +217,12 @@ function buildSchemeClipboardText(drugs) {
                 .filter(Boolean);
             const tradePart = trades.length ? `(${trades.join(", ")})` : "";
             const dosage = String(drug.dosage || "").trim();
-            const head = [form, title, tradePart, dosage].filter(Boolean).join(" ").trim();
+            const rawQty = Number.parseInt(String(drug.dispenseQty || "").trim(), 10);
+            const qty = Number.isFinite(rawQty) && rawQty > 0
+                ? rawQty
+                : extractDefaultDispenseQty(drug.packaging);
+            const qtyPart = qty ? `D.t.d. № ${qty}` : "";
+            const head = [form, title, tradePart, dosage, qtyPart].filter(Boolean).join(" ").trim();
             const scheme = String(drug.selectedScheme || "").trim();
             return scheme ? `${head} — ${scheme}` : head;
         })
@@ -2058,7 +2063,6 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
     const index = buildTreatmentNameIndex(catalog);
     const drugs = [];
     const unmatched = [];
-    const seen = new Set();
 
     for (const line of lines) {
         const { head, scheme: schemeFromSplit } = splitTreatmentHeadAndScheme(line);
@@ -2111,14 +2115,6 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
             matched_as: found.entry.display,
             match_kind: found.entry.kind,
         };
-        if (payload.mnn && seen.has(payload.mnn)) {
-            const filtered = drugs.filter((item) => item.mnn !== payload.mnn);
-            drugs.length = 0;
-            drugs.push(...filtered);
-        }
-        if (payload.mnn) {
-            seen.add(payload.mnn);
-        }
         drugs.push(payload);
     }
 
