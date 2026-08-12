@@ -62,7 +62,11 @@ def validate_prescription_payload(payload: dict[str, Any] | None, *, require_car
                 warnings.append(f"Препарат {index}: количество D.t.d. меньше 1.")
                 continue
             pack_qty = extract_default_dispense_qty(drug.get("packaging"))
-            step = 14 if pack_qty == 28 else 10 if pack_qty == 30 else 1
+            # Правило листания/кратности:
+            # - если фасовка кратна 14 → шаг 14
+            # - иначе если кратна 10 → шаг 10
+            # - иначе шаг 1
+            step = 14 if pack_qty % 14 == 0 else 10 if pack_qty % 10 == 0 else 1
             if step > 1 and qty_num % step != 0:
                 errors.append(
                     f"Препарат {index}: количество D.t.d. должно быть кратно {step} (фасовка {pack_qty})."

@@ -294,10 +294,14 @@ function extractDefaultDispenseQty(packaging) {
 
 function dispenseStepByPackaging(packaging) {
     const packQty = extractDefaultDispenseQty(packaging);
-    if (packQty === 28) {
+    // Правило из практики:
+    // - если фасовка кратна 14 → листаем/округляем шагом 14
+    // - иначе если фасовка кратна 10 → шаг 10
+    // - иначе шаг 1
+    if (packQty % 14 === 0) {
         return 14;
     }
-    if (packQty === 30) {
+    if (packQty % 10 === 0) {
         return 10;
     }
     return 1;

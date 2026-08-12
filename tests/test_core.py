@@ -240,6 +240,21 @@ class TestValidate:
         assert not result.ok
         assert any("кратно 14" in error for error in result.errors)
 
+    def test_errors_for_dispense_step_by_packaging_50(self):
+        drugs = [
+            {
+                "mnn": "Escitalopram",
+                "drug_form": "Tab.",
+                "dosage": "10 мг",
+                "packaging": "N50",
+                "dispenseQty": 93,
+                "selectedScheme": "по 1 таблетке утром",
+            }
+        ]
+        result = validate_prescription_payload(self._payload(drugs=drugs))
+        assert not result.ok
+        assert any("кратно 10" in error for error in result.errors)
+
     def test_normalize_filters_empty_drugs(self):
         payload = self._payload(drugs=[{"mnn": ""}, {"mnn": "X", "dispenseQty": None}])
         normalized = normalize_prescription_payload(payload)
