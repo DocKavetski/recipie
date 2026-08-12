@@ -2629,7 +2629,8 @@ async function applyUpdateFlow(options = {}) {
         return result;
     } catch (error) {
         console.error(error);
-        setStatus("Ошибка при обновлении приложения.");
+        const detail = error?.message ? `: ${error.message}` : (error ? `: ${String(error)}` : "");
+        setStatus(`Ошибка при обновлении приложения${detail}`);
         return null;
     } finally {
         setUpdateControlsBusy(false);
