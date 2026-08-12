@@ -199,7 +199,20 @@ def remote_version_file_via_http() -> str | None:
         raw = _http_bytes(url, timeout=15).decode("utf-8").strip()
         return raw or None
     except Exception:  # noqa: BLE001
-        return None
+        # Если raw.githubusercontent.com недоступен/блокируется — пробуем GitHub API.
+        try:
+            api_url = (
+                f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/"
+                f"VERSION?ref={GITHUB_BRANCH}"
+            )
+            payload = _http_json(api_url, timeout=15)
+            import base64
+            content_b64 = payload.get("content") or ""
+            if isinstance(content_b64, str) and content_b64:
+                decoded = base64.b64decode(content_b64).decode("utf-8").strip()
+                return decoded or None
+        except Exception:  # noqa: BLE001
+            return None
 
 
 def remote_version_file() -> str | None:
