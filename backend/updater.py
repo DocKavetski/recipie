@@ -56,6 +56,16 @@ def app_root() -> Path:
 ROOT = app_root()
 
 
+def _version_tuple(value: str) -> tuple[int, ...]:
+    parts = []
+    for chunk in str(value or "").strip().split("."):
+        try:
+            parts.append(int(chunk))
+        except ValueError:
+            return ()
+    return tuple(parts)
+
+
 def _http_json(url: str, timeout: int = 20) -> Any:
     request = Request(
         url,
@@ -298,9 +308,14 @@ def get_update_status() -> dict[str, Any]:
         release = latest_release_asset()
         if release:
             status["release_asset"] = release
-            if release.get("tag") and release["tag"] != local_version:
-                remote_version = release["tag"]
-                status["remote_version"] = remote_version
+            release_tag = str(release.get("tag") or "").strip()
+            if release_tag:
+                # Не даём старому ReleaseTag занижать более новую VERSION в main.
+                current_remote = _version_tuple(remote_version)
+                release_remote = _version_tuple(release_tag)
+                if (not current_remote and release_remote) or (release_remote and release_remote > current_remote):
+                    remote_version = release_tag
+                    status["remote_version"] = remote_version
 
     if local_sha and remote_sha and is_git_checkout():
         status["update_available"] = local_sha[:12] != remote_sha[:12]
