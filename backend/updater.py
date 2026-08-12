@@ -75,14 +75,30 @@ def _http_json(url: str, timeout: int = 20) -> Any:
             "Accept": "application/vnd.github+json",
         },
     )
-    with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except ssl.SSLError as exc:
+        # Последний fallback для окружений без CA-сертификатов.
+        # Апдейтеру нужно уметь обновляться даже в таких системах.
+        msg = str(exc).lower()
+        if "certificate verify failed" in msg or "local issuer certificate" in msg or "unable to get local issuer certificate" in msg:
+            with urlopen(request, timeout=timeout, context=_ssl_unverified_context()) as response:
+                return json.loads(response.read().decode("utf-8"))
+        raise
 
 
 def _http_bytes(url: str, timeout: int = 60) -> bytes:
     request = Request(url, headers={"User-Agent": "RecipieUpdater/1.1"})
-    with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
-        return response.read()
+    try:
+        with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
+            return response.read()
+    except ssl.SSLError as exc:
+        msg = str(exc).lower()
+        if "certificate verify failed" in msg or "local issuer certificate" in msg or "unable to get local issuer certificate" in msg:
+            with urlopen(request, timeout=timeout, context=_ssl_unverified_context()) as response:
+                return response.read()
+        raise
 
 
 def _ssl_context() -> ssl.SSLContext | None:
@@ -100,6 +116,15 @@ def _ssl_context() -> ssl.SSLContext | None:
     except Exception:
         # Если certifi недоступен — полагаемся на системный дефолт.
         return None
+
+
+def _ssl_unverified_context() -> ssl.SSLContext:
+    """Не проверяет сертификаты. Использовать только как fallback для апдейтора."""
+    try:
+        return ssl._create_unverified_context()  # type: ignore[attr-defined]
+    except Exception:
+        # В крайнем случае всё равно вернём create_default_context
+        return ssl.create_default_context()
 
 
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
