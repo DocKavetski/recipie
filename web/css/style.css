@@ -359,14 +359,18 @@ body {
     font-weight: 700;
 }
 
-.template-preview-box {
-    min-height: 90px;
-    padding: 10px 12px;
-    border: 1px solid #d8e1ea;
-    border-radius: 8px;
-    background: #f8fafc;
-    white-space: pre-line;
-    font-size: 13px;
+.template-recipe-table .template-col-availability,
+.template-recipe-table .drug-availability-badge {
+    display: none;
+}
+
+.template-recipe-table th:nth-last-child(2),
+.template-recipe-table td:nth-last-child(2) {
+    display: none;
+}
+
+#templateDrugsEmptyState {
+    margin-top: 8px;
 }
 
 .workspace-grid {

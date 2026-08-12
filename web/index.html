@@ -147,7 +147,7 @@
                     <div class="panel-head">
                         <div>
                             <div class="panel-title mb-0">Редактор шаблонов</div>
-                            <div class="stub-note">Сложные схемы (например титрация венлафаксина в 3 строки) сохраняйте как шаблон и загружайте в один клик.</div>
+                            <div class="stub-note">Составляйте и редактируйте набор препаратов (титрация, комбинации). В рецепт подставляются только строки препаратов — данные пациента не меняются.</div>
                         </div>
                     </div>
                     <div class="row g-2 align-items-end mb-3">
@@ -167,15 +167,54 @@
                             >
                         </div>
                         <div class="col-12 col-lg-4">
-                            <div class="d-flex flex-wrap gap-2">
-                                <button class="btn btn-sm btn-primary" id="templateManagerSaveBtn" type="button">Сохранить текущую форму</button>
-                                <button class="btn btn-sm btn-outline-secondary" id="templateManagerLoadBtn" type="button">Загрузить шаблон</button>
-                                <button class="btn btn-sm btn-outline-danger" id="templateManagerDeleteBtn" type="button">Удалить</button>
-                            </div>
+                            <div class="small text-muted" id="templateManagerMeta">Новый шаблон</div>
                         </div>
                     </div>
-                    <div class="small text-muted mb-2">Состав выбранного шаблона:</div>
-                    <div class="template-preview-box" id="templateManagerPreview">Выберите шаблон для просмотра состава.</div>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <button class="btn btn-sm btn-outline-secondary" id="templateManagerNewBtn" type="button">Новый</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="templateManagerImportBtn" type="button">Из рецепта</button>
+                        <button class="btn btn-sm btn-primary" id="templateManagerSaveBtn" type="button">Сохранить</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="templateManagerDuplicateBtn" type="button">Дублировать</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="templateManagerLoadBtn" type="button">В рецепт</button>
+                        <button class="btn btn-sm btn-outline-danger" id="templateManagerDeleteBtn" type="button">Удалить</button>
+                    </div>
+
+                    <div class="drug-search-bar mb-3">
+                        <label class="form-label mb-1" for="templateDrugSearch">Добавить препарат в шаблон</label>
+                        <div class="drug-search-wrap">
+                            <input
+                                class="form-control form-control-sm drug-search-input"
+                                id="templateDrugSearch"
+                                type="text"
+                                placeholder="МНН, русское или торговое название"
+                                autocomplete="off"
+                            >
+                            <div class="drug-search-dropdown" id="templateDrugSearchDropdown" hidden></div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle recipe-table template-recipe-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="min-width: 110px;">Режим</th>
+                                    <th style="min-width: 150px;">Торговое название</th>
+                                    <th style="min-width: 120px;">МНН</th>
+                                    <th style="min-width: 150px;">Русское название</th>
+                                    <th style="min-width: 140px;">Лат. название</th>
+                                    <th style="min-width: 90px;">Форма</th>
+                                    <th style="min-width: 90px;">Дозировка</th>
+                                    <th style="min-width: 90px;">Фасовка</th>
+                                    <th style="min-width: 110px;">D.t.d. №</th>
+                                    <th style="min-width: 220px;">Схема</th>
+                                    <th class="template-col-availability" style="min-width: 90px;">Наличие</th>
+                                    <th style="min-width: 60px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="templateDrugRows"></tbody>
+                        </table>
+                    </div>
+                    <div class="drugs-empty is-visible" id="templateDrugsEmptyState">Шаблон пуст — добавьте препараты через поиск или импортируйте из рецепта</div>
                 </div>
             </section>
 

@@ -1,6 +1,7 @@
 const fallbackCatalog = [];
 
 const drugRowsContainer = document.getElementById("drugRows");
+const templateDrugRowsContainer = document.getElementById("templateDrugRows");
 const rowTemplate = document.getElementById("drugRowTemplate");
 const birthDateInput = document.getElementById("birthDate");
 const ageValue = document.getElementById("ageValue");
@@ -29,7 +30,12 @@ const templateManagerName = document.getElementById("templateManagerName");
 const templateManagerSaveBtn = document.getElementById("templateManagerSaveBtn");
 const templateManagerLoadBtn = document.getElementById("templateManagerLoadBtn");
 const templateManagerDeleteBtn = document.getElementById("templateManagerDeleteBtn");
-const templateManagerPreview = document.getElementById("templateManagerPreview");
+const templateManagerNewBtn = document.getElementById("templateManagerNewBtn");
+const templateManagerImportBtn = document.getElementById("templateManagerImportBtn");
+const templateManagerDuplicateBtn = document.getElementById("templateManagerDuplicateBtn");
+const templateManagerMeta = document.getElementById("templateManagerMeta");
+const templateDrugSearch = document.getElementById("templateDrugSearch");
+const templateDrugSearchDropdown = document.getElementById("templateDrugSearchDropdown");
 const showSchemeBtn = document.getElementById("showSchemeBtn");
 const treatmentParseInput = document.getElementById("treatmentParseInput");
 const parseTreatmentBtn = document.getElementById("parseTreatmentBtn");
@@ -49,6 +55,9 @@ let doctorModalInstance = null;
 let autosaveTimer = null;
 let searchMatches = [];
 let searchActiveIndex = 0;
+let templateSearchMatches = [];
+let templateSearchActiveIndex = 0;
+let templateCreatedAtMap = {};
 let latestUpdateStatus = null;
 let printBlankCssText = "";
 let autoUpdateStarted = false;
@@ -266,17 +275,44 @@ function getFormState() {
     };
 }
 
-function refreshDrugsEmptyState() {
-    const emptyState = document.getElementById("drugsEmptyState");
+function refreshDrugsEmptyState(container = drugRowsContainer) {
+    const emptyStateId = container === templateDrugRowsContainer ? "templateDrugsEmptyState" : "drugsEmptyState";
+    const emptyState = document.getElementById(emptyStateId);
     if (!emptyState) {
         return;
     }
-    emptyState.classList.toggle("is-visible", drugRowsContainer.children.length === 0);
+    emptyState.classList.toggle("is-visible", container.children.length === 0);
 }
 
-function clearDrugRows() {
-    drugRowsContainer.innerHTML = "";
-    refreshDrugsEmptyState();
+function clearDrugRows(container = drugRowsContainer) {
+    container.innerHTML = "";
+    refreshDrugsEmptyState(container);
+}
+
+function getDrugsFromContainer(container = drugRowsContainer) {
+    return Array.from(container.querySelectorAll(".drug-row")).map(getRowState);
+}
+
+function stripDrugForTemplate(drug) {
+    const copy = { ...drug };
+    delete copy.availability;
+    return copy;
+}
+
+function getTemplatePayload(drugs) {
+    return {
+        drugs: (Array.isArray(drugs) ? drugs : [])
+            .map(stripDrugForTemplate)
+            .filter((drug) => drug.mnn || drug.russian_name),
+    };
+}
+
+function getTemplatePayloadFromForm() {
+    return getTemplatePayload(getDrugsFromContainer(drugRowsContainer));
+}
+
+function getTemplateEditorPayload() {
+    return getTemplatePayload(getDrugsFromContainer(templateDrugRowsContainer));
 }
 
 function escapeHtml(value) {
@@ -1340,10 +1376,10 @@ function bindFormDosageSelects(row) {
     }
 }
 
-function bindRowRemoval(row) {
+function bindRowRemoval(row, container = drugRowsContainer) {
     row.querySelector(".remove-row-btn").addEventListener("click", () => {
         row.remove();
-        refreshDrugsEmptyState();
+        refreshDrugsEmptyState(container);
         setStatus("Строка препарата удалена.");
     });
 }
@@ -1639,7 +1675,7 @@ function createEmptyRowData() {
     };
 }
 
-function addDrugRow(drug = null, options = {}) {
+function addDrugRow(drug = null, options = {}, container = drugRowsContainer) {
     const fragment = rowTemplate.content.cloneNode(true);
     const row = fragment.querySelector(".drug-row");
 
@@ -1650,11 +1686,12 @@ function addDrugRow(drug = null, options = {}) {
     bindDispenseConstraints(row);
     bindFormDosageSelects(row);
     bindSchemeInput(row);
-    bindRowRemoval(row);
+    bindRowRemoval(row, container);
     setAvailabilityBadge(row, options.availability || "unknown");
 
-    drugRowsContainer.appendChild(row);
-    refreshDrugsEmptyState();
+    container.appendChild(row);
+    refreshDrugsEmptyState(container);
+    return row;
 }
 
 function clearTreatmentParseInput(message = "Система найдёт препараты в каталоге и добавит их в рецепт") {
@@ -1666,63 +1703,80 @@ function clearTreatmentParseInput(message = "Система найдёт пре�
     }
 }
 
+function mergeDrugWithCatalog(drug) {
+    const catalogMatch = catalogDrugs.find((item) => item.mnn === drug.mnn) || {};
+    return {
+        ...catalogMatch,
+        ...drug,
+        form_options: drug.form_options?.length ? drug.form_options : catalogMatch.form_options,
+        dosage_options: drug.dosage_options?.length ? drug.dosage_options : catalogMatch.dosage_options,
+        form_dosage_map: (drug.form_dosage_map && Object.keys(drug.form_dosage_map).length)
+            ? drug.form_dosage_map
+            : catalogMatch.form_dosage_map,
+        trade_names: drug.trade_names?.length ? drug.trade_names : catalogMatch.trade_names,
+        scheme_options: drug.scheme_options?.length ? drug.scheme_options : catalogMatch.scheme_options,
+        trade_details: Object.keys(drug.trade_details || {}).length
+            ? drug.trade_details
+            : catalogMatch.trade_details,
+    };
+}
+
+function drugRowOptionsFromState(drug) {
+    return {
+        mode: drug.mode || (drug.selectedTrade ? "trade" : "mnn"),
+        selectedTrade: drug.selectedTrade || "",
+        drug_form: drug.drug_form,
+        dosage: drug.dosage,
+        dispenseQty: drug.dispenseQty || drug.dispense_qty || 1,
+        selectedScheme: drug.selectedScheme || "",
+        availability: "unknown",
+    };
+}
+
+function restoreDrugsToContainer(drugs, container = drugRowsContainer, options = {}) {
+    clearDrugRows(container);
+    for (const drug of Array.isArray(drugs) ? drugs : []) {
+        if (!drug?.mnn && !drug?.russian_name) {
+            continue;
+        }
+        addDrugRow(mergeDrugWithCatalog(drug), drugRowOptionsFromState(drug), container);
+    }
+    if (options.refreshAvailability && container === drugRowsContainer) {
+        Array.from(container.querySelectorAll(".drug-row")).forEach((row) => {
+            refreshRowAvailability(row);
+        });
+    }
+}
+
 function restoreFormState(state, options = {}) {
     if (!state) {
+        return;
+    }
+
+    if (options.drugsOnly) {
+        restoreDrugsToContainer(state.drugs, drugRowsContainer, { refreshAvailability: true });
         return;
     }
 
     if (!options.keepCardNumber) {
         cardNumberInput.value = state.card_number || "";
     }
-    patientNameInput.value = state.patient_name || "";
-    birthDateInput.value = normalizeBirthDate(state.birth_date || "");
-    syncPatientSmartFromFields();
-    syncDoctorInputs(state.doctor_name || recipeDoctorInput.value || "");
+    if (!options.keepPatient) {
+        patientNameInput.value = state.patient_name || "";
+        birthDateInput.value = normalizeBirthDate(state.birth_date || "");
+        syncPatientSmartFromFields();
+    }
+    if (!options.keepDoctor) {
+        syncDoctorInputs(state.doctor_name || recipeDoctorInput.value || "");
+    }
     clearDrugRows();
     if (!options.keepTreatmentParse) {
         clearTreatmentParseInput();
     }
 
-    const drugs = Array.isArray(state.drugs) ? state.drugs : [];
-    for (const drug of drugs) {
-        if (!drug.mnn && !drug.russian_name) {
-            continue;
-        }
-
-        const catalogMatch = catalogDrugs.find((item) => item.mnn === drug.mnn) || {};
-        addDrugRow(
-            {
-                ...catalogMatch,
-                ...drug,
-                form_options: drug.form_options?.length ? drug.form_options : catalogMatch.form_options,
-                dosage_options: drug.dosage_options?.length ? drug.dosage_options : catalogMatch.dosage_options,
-                form_dosage_map: (drug.form_dosage_map && Object.keys(drug.form_dosage_map).length)
-                    ? drug.form_dosage_map
-                    : catalogMatch.form_dosage_map,
-                trade_names: drug.trade_names?.length ? drug.trade_names : catalogMatch.trade_names,
-                scheme_options: drug.scheme_options?.length ? drug.scheme_options : catalogMatch.scheme_options,
-                trade_details: Object.keys(drug.trade_details || {}).length
-                    ? drug.trade_details
-                    : catalogMatch.trade_details,
-            },
-            {
-                mode: drug.mode || "mnn",
-                selectedTrade: drug.selectedTrade || "",
-                drug_form: drug.drug_form,
-                dosage: drug.dosage,
-                dispenseQty: drug.dispenseQty || 1,
-                selectedScheme: drug.selectedScheme || "",
-                availability: "unknown",
-            },
-        );
-    }
+    restoreDrugsToContainer(state.drugs, drugRowsContainer, { refreshAvailability: true });
 
     ageValue.value = calculateAge(birthDateInput.value);
-
-    // Перепроверяем наличие, чтобы не показывать устаревшее «Нет» из автосохранения
-    Array.from(drugRowsContainer.querySelectorAll(".drug-row")).forEach((row) => {
-        refreshRowAvailability(row);
-    });
 }
 
 function initDoctorModal() {
@@ -1847,6 +1901,39 @@ async function restoreAutosaveState() {
     }
 }
 
+function formatTemplateCreatedAt(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+        return "";
+    }
+    const parsed = new Date(raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`);
+    if (Number.isNaN(parsed.getTime())) {
+        return raw;
+    }
+    return parsed.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+function updateTemplateManagerMeta(name = "", createdAt = "") {
+    if (!templateManagerMeta) {
+        return;
+    }
+    const templateName = String(name || "").trim();
+    if (!templateName) {
+        templateManagerMeta.textContent = "Новый шаблон";
+        return;
+    }
+    const formatted = formatTemplateCreatedAt(createdAt);
+    templateManagerMeta.textContent = formatted
+        ? `«${templateName}» · сохранён ${formatted}`
+        : `«${templateName}»`;
+}
+
 async function refreshTemplates() {
     if (!window.eel || typeof window.eel.list_templates !== "function") {
         return;
@@ -1856,10 +1943,12 @@ async function refreshTemplates() {
     if (templateManagerSelect) {
         templateManagerSelect.innerHTML = "<option value=\"\">Выберите шаблон</option>";
     }
+    templateCreatedAtMap = {};
 
     try {
         const templates = await window.eel.list_templates()();
         for (const template of templates) {
+            templateCreatedAtMap[template.name] = template.created_at || "";
             const option = document.createElement("option");
             option.value = template.name;
             option.textContent = template.name;
@@ -1867,7 +1956,8 @@ async function refreshTemplates() {
             if (templateManagerSelect) {
                 const managerOption = document.createElement("option");
                 managerOption.value = template.name;
-                managerOption.textContent = template.name;
+                const formatted = formatTemplateCreatedAt(template.created_at);
+                managerOption.textContent = formatted ? `${template.name} · ${formatted}` : template.name;
                 templateManagerSelect.appendChild(managerOption);
             }
         }
@@ -1876,37 +1966,87 @@ async function refreshTemplates() {
     }
 }
 
-async function renderTemplateManagerPreview(name) {
-    if (!templateManagerPreview) {
-        return;
-    }
-    const templateName = String(name || "").trim();
-    if (!templateName) {
-        templateManagerPreview.textContent = "Выберите шаблон для просмотра состава.";
-        return;
+async function loadTemplateIntoEditor(templateName) {
+    const name = String(templateName || "").trim();
+    if (!name) {
+        clearDrugRows(templateDrugRowsContainer);
+        updateTemplateManagerMeta("");
+        return false;
     }
     if (!window.eel || typeof window.eel.load_template !== "function") {
-        templateManagerPreview.textContent = "Backend недоступен.";
-        return;
+        setStatus("Backend недоступен.");
+        return false;
     }
     try {
-        const state = await window.eel.load_template(templateName)();
-        const drugs = Array.isArray(state?.drugs) ? state.drugs.filter((drug) => drug.mnn || drug.russian_name) : [];
-        if (!drugs.length) {
-            templateManagerPreview.textContent = "Шаблон пуст.";
-            return;
+        const state = await window.eel.load_template(name)();
+        if (!state) {
+            setStatus("Шаблон не найден.");
+            return false;
         }
-        const lines = drugs.map((drug, index) => {
-            const title = drug.russian_name || drug.mnn || "Препарат";
-            const dose = drug.dosage ? ` ${drug.dosage}` : "";
-            const scheme = drug.selectedScheme ? ` — ${drug.selectedScheme}` : "";
-            return `${index + 1}. ${title}${dose}${scheme}`;
-        });
-        templateManagerPreview.textContent = lines.join("\n");
+        restoreDrugsToContainer(state.drugs, templateDrugRowsContainer);
+        if (templateManagerName) {
+            templateManagerName.value = name;
+        }
+        updateTemplateManagerMeta(name, templateCreatedAtMap[name] || "");
+        return true;
     } catch (error) {
         console.error(error);
-        templateManagerPreview.textContent = "Не удалось прочитать шаблон.";
+        setStatus("Не удалось загрузить шаблон в редактор.");
+        return false;
     }
+}
+
+function clearTemplateEditor() {
+    clearDrugRows(templateDrugRowsContainer);
+    if (templateManagerSelect) {
+        templateManagerSelect.value = "";
+    }
+    if (templateManagerName) {
+        templateManagerName.value = "";
+    }
+    updateTemplateManagerMeta("");
+}
+
+async function saveTemplateByName(name, payload) {
+    const templateName = String(name || "").trim();
+    if (!templateName) {
+        setStatus("Введите имя шаблона.");
+        return false;
+    }
+    const drugs = Array.isArray(payload?.drugs) ? payload.drugs : [];
+    if (!drugs.length) {
+        setStatus("Шаблон пуст — добавьте хотя бы один препарат.");
+        return false;
+    }
+    try {
+        await window.eel.save_template(templateName, payload)();
+        await refreshTemplates();
+        templateSelect.value = templateName;
+        if (templateManagerSelect) {
+            templateManagerSelect.value = templateName;
+        }
+        if (templateManagerName) {
+            templateManagerName.value = templateName;
+        }
+        updateTemplateManagerMeta(templateName, templateCreatedAtMap[templateName] || new Date().toISOString());
+        return true;
+    } catch (error) {
+        console.error(error);
+        setStatus("Не удалось сохранить шаблон.");
+        return false;
+    }
+}
+
+function makeDuplicateTemplateName(baseName) {
+    const trimmed = String(baseName || "").trim() || "Шаблон";
+    const existing = new Set(Object.keys(templateCreatedAtMap));
+    let candidate = `${trimmed} (копия)`;
+    let index = 2;
+    while (existing.has(candidate)) {
+        candidate = `${trimmed} (копия ${index})`;
+        index += 1;
+    }
+    return candidate;
 }
 
 async function loadTemplateIntoForm(templateName) {
@@ -1920,8 +2060,8 @@ async function loadTemplateIntoForm(templateName) {
             setStatus("Шаблон не найден.");
             return false;
         }
-        restoreFormState(state, { keepCardNumber: true });
-        setStatus(`Шаблон «${templateName}» загружен.`);
+        restoreFormState(state, { keepCardNumber: true, keepPatient: true, keepDoctor: true, drugsOnly: true });
+        setStatus(`Шаблон «${templateName}» загружен в рецепт (данные пациента не изменены).`);
         return true;
     } catch (error) {
         console.error(error);
@@ -1930,43 +2070,19 @@ async function loadTemplateIntoForm(templateName) {
     }
 }
 
-function applyParsedTreatmentDrugs(drugs) {
-    clearDrugRows();
-    for (const drug of drugs) {
-        if (!drug?.mnn && !drug?.russian_name) {
-            continue;
-        }
-        const catalogMatch = catalogDrugs.find((item) => item.mnn === drug.mnn) || {};
-        addDrugRow(
-            {
-                ...catalogMatch,
-                ...drug,
-                form_options: drug.form_options?.length ? drug.form_options : catalogMatch.form_options,
-                dosage_options: drug.dosage_options?.length ? drug.dosage_options : catalogMatch.dosage_options,
-                form_dosage_map: (drug.form_dosage_map && Object.keys(drug.form_dosage_map).length)
-                    ? drug.form_dosage_map
-                    : catalogMatch.form_dosage_map,
-                trade_names: drug.trade_names?.length ? drug.trade_names : catalogMatch.trade_names,
-                scheme_options: drug.scheme_options?.length ? drug.scheme_options : catalogMatch.scheme_options,
-                trade_details: Object.keys(drug.trade_details || {}).length
-                    ? drug.trade_details
-                    : catalogMatch.trade_details,
-            },
-            {
-                mode: drug.mode || (drug.selectedTrade ? "trade" : "mnn"),
-                selectedTrade: drug.selectedTrade || "",
-                drug_form: drug.drug_form,
-                dosage: drug.dosage,
-                dispenseQty: drug.dispenseQty || drug.dispense_qty || undefined,
-                selectedScheme: drug.selectedScheme || "",
-                availability: "unknown",
-            },
-        );
+function applyTemplateEditorToRecipe() {
+    const drugs = getDrugsFromContainer(templateDrugRowsContainer);
+    if (!drugs.length) {
+        setStatus("В шаблоне нет препаратов.");
+        return false;
     }
+    restoreFormState({ drugs }, { keepCardNumber: true, keepPatient: true, keepDoctor: true, drugsOnly: true });
+    setStatus(`В рецепт загружено ${drugs.length} препарат(ов) из редактора шаблона.`);
+    return true;
+}
 
-    Array.from(drugRowsContainer.querySelectorAll(".drug-row")).forEach((row) => {
-        refreshRowAvailability(row);
-    });
+function applyParsedTreatmentDrugs(drugs) {
+    restoreDrugsToContainer(drugs, drugRowsContainer, { refreshAvailability: true });
 }
 
 function normalizeTreatmentMatchText(value) {
@@ -2380,6 +2496,122 @@ function bindTreatmentParseControls() {
     }
 }
 
+function hideTemplateSearchDropdown() {
+    if (!templateDrugSearchDropdown) {
+        return;
+    }
+    templateDrugSearchDropdown.hidden = true;
+    templateDrugSearchDropdown.innerHTML = "";
+    templateSearchMatches = [];
+    templateSearchActiveIndex = 0;
+}
+
+function renderTemplateSearchDropdown(matches, activeIndex = 0) {
+    if (!templateDrugSearchDropdown) {
+        return;
+    }
+    templateSearchMatches = matches;
+    templateSearchActiveIndex = matches.length ? Math.max(0, Math.min(activeIndex, matches.length - 1)) : 0;
+    templateDrugSearchDropdown.innerHTML = "";
+
+    if (!matches.length) {
+        hideTemplateSearchDropdown();
+        return;
+    }
+
+    matches.forEach((drug, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `drug-search-item${index === templateSearchActiveIndex ? " is-active" : ""}`;
+        button.innerHTML = `
+            <div class="drug-search-item-title">${escapeHtml(drug.russian_name)} · ${escapeHtml(drug.mnn)}</div>
+            <div class="drug-search-item-meta">${escapeHtml((drug.form_options || [drug.drug_form]).join("/"))} · ${escapeHtml((drug.dosage_options || [drug.dosage]).slice(0, 4).join(", "))} · ${(drug.trade_names || []).slice(0, 3).map(escapeHtml).join(", ")}</div>
+        `;
+        button.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            addDrugFromTemplateSearch(drug);
+        });
+        templateDrugSearchDropdown.appendChild(button);
+    });
+
+    templateDrugSearchDropdown.hidden = false;
+}
+
+function addDrugFromTemplateSearch(drug) {
+    if (!drug || !templateDrugRowsContainer) {
+        return;
+    }
+
+    addDrugRow(drug, {
+        mode: "mnn",
+        availability: "unknown",
+        drug_form: drug.drug_form,
+        dosage: drug.dosage,
+    }, templateDrugRowsContainer);
+    if (templateDrugSearch) {
+        templateDrugSearch.value = "";
+    }
+    hideTemplateSearchDropdown();
+    setStatus(`В шаблон добавлен: ${drug.russian_name}.`);
+    templateDrugSearch?.focus();
+}
+
+function bindTemplateDrugSearch() {
+    if (!templateDrugSearch || templateDrugSearch.dataset.bound) {
+        return;
+    }
+
+    templateDrugSearch.addEventListener("input", () => {
+        const matches = findDrugsByQuery(templateDrugSearch.value);
+        renderTemplateSearchDropdown(matches, 0);
+    });
+
+    templateDrugSearch.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown") {
+            if (!templateSearchMatches.length) {
+                return;
+            }
+            event.preventDefault();
+            renderTemplateSearchDropdown(templateSearchMatches, templateSearchActiveIndex + 1);
+            return;
+        }
+
+        if (event.key === "ArrowUp") {
+            if (!templateSearchMatches.length) {
+                return;
+            }
+            event.preventDefault();
+            renderTemplateSearchDropdown(templateSearchMatches, templateSearchActiveIndex - 1);
+            return;
+        }
+
+        if (event.key === "Escape") {
+            hideTemplateSearchDropdown();
+            return;
+        }
+
+        if (event.key === "Enter") {
+            event.preventDefault();
+            const matches = templateSearchMatches.length
+                ? templateSearchMatches
+                : findDrugsByQuery(templateDrugSearch.value);
+            if (!matches.length) {
+                setStatus("Ничего не найдено.");
+                return;
+            }
+            const selected = matches[Math.max(0, Math.min(templateSearchActiveIndex, matches.length - 1))]
+                || resolveDrugByQuery(templateDrugSearch.value);
+            addDrugFromTemplateSearch(selected);
+        }
+    });
+
+    templateDrugSearch.addEventListener("blur", () => {
+        window.setTimeout(() => hideTemplateSearchDropdown(), 150);
+    });
+
+    templateDrugSearch.dataset.bound = "true";
+}
+
 async function bindTemplateManagerControls() {
     if (!templateManagerSelect || templateManagerSelect.dataset.bound) {
         return;
@@ -2389,40 +2621,61 @@ async function bindTemplateManagerControls() {
         if (templateManagerName) {
             templateManagerName.value = selected;
         }
-        await renderTemplateManagerPreview(selected);
+        await loadTemplateIntoEditor(selected);
     });
     templateManagerSelect.dataset.bound = "true";
+
+    if (templateManagerNewBtn && !templateManagerNewBtn.dataset.bound) {
+        templateManagerNewBtn.addEventListener("click", () => {
+            clearTemplateEditor();
+            setStatus("Новый шаблон — добавьте препараты и сохраните.");
+            templateDrugSearch?.focus();
+        });
+        templateManagerNewBtn.dataset.bound = "true";
+    }
+
+    if (templateManagerImportBtn && !templateManagerImportBtn.dataset.bound) {
+        templateManagerImportBtn.addEventListener("click", () => {
+            const drugs = getDrugsFromContainer(drugRowsContainer);
+            if (!drugs.length) {
+                setStatus("В рецепте нет препаратов для импорта.");
+                return;
+            }
+            restoreDrugsToContainer(drugs, templateDrugRowsContainer);
+            setStatus(`Импортировано ${drugs.length} препарат(ов) из рецепта.`);
+        });
+        templateManagerImportBtn.dataset.bound = "true";
+    }
 
     if (templateManagerSaveBtn && !templateManagerSaveBtn.dataset.bound) {
         templateManagerSaveBtn.addEventListener("click", async () => {
             const name = String(templateManagerName?.value || templateManagerSelect.value || "").trim();
-            if (!name) {
-                setStatus("Введите имя шаблона.");
-                return;
-            }
-            try {
-                await window.eel.save_template(name, getFormState())();
-                await refreshTemplates();
-                templateSelect.value = name;
-                templateManagerSelect.value = name;
-                if (templateManagerName) {
-                    templateManagerName.value = name;
-                }
-                await renderTemplateManagerPreview(name);
+            const saved = await saveTemplateByName(name, getTemplateEditorPayload());
+            if (saved) {
                 setStatus(`Шаблон «${name}» сохранён.`);
-            } catch (error) {
-                console.error(error);
-                setStatus("Не удалось сохранить шаблон.");
             }
         });
         templateManagerSaveBtn.dataset.bound = "true";
     }
 
+    if (templateManagerDuplicateBtn && !templateManagerDuplicateBtn.dataset.bound) {
+        templateManagerDuplicateBtn.addEventListener("click", async () => {
+            const copyName = makeDuplicateTemplateName(templateManagerName?.value || templateManagerSelect.value);
+            const saved = await saveTemplateByName(copyName, getTemplateEditorPayload());
+            if (saved) {
+                setStatus(`Создана копия: «${copyName}».`);
+            }
+        });
+        templateManagerDuplicateBtn.dataset.bound = "true";
+    }
+
     if (templateManagerLoadBtn && !templateManagerLoadBtn.dataset.bound) {
         templateManagerLoadBtn.addEventListener("click", async () => {
-            const name = String(templateManagerSelect.value || templateManagerName?.value || "").trim();
-            if (await loadTemplateIntoForm(name)) {
-                templateSelect.value = name;
+            if (applyTemplateEditorToRecipe()) {
+                const recipeTab = document.querySelector('[data-bs-target="#tab-recipe"]');
+                if (recipeTab && typeof bootstrap !== "undefined") {
+                    bootstrap.Tab.getOrCreateInstance(recipeTab).show();
+                }
             }
         });
         templateManagerLoadBtn.dataset.bound = "true";
@@ -2441,11 +2694,8 @@ async function bindTemplateManagerControls() {
             try {
                 await window.eel.delete_template(name)();
                 await refreshTemplates();
-                if (templateManagerName) {
-                    templateManagerName.value = "";
-                }
+                clearTemplateEditor();
                 templateSelect.value = "";
-                await renderTemplateManagerPreview("");
                 setStatus(`Шаблон «${name}» удалён.`);
             } catch (error) {
                 console.error(error);
@@ -2546,14 +2796,9 @@ async function bindFormActions() {
             return;
         }
 
-        try {
-            await window.eel.save_template(templateName, getFormState())();
-            await refreshTemplates();
-            templateSelect.value = templateName;
-            setStatus("Шаблон сохранен.");
-        } catch (error) {
-            console.error(error);
-            setStatus("Не удалось сохранить шаблон.");
+        const saved = await saveTemplateByName(templateName.trim(), getTemplatePayloadFromForm());
+        if (saved) {
+            setStatus("Шаблон сохранён (только препараты).");
         }
     });
 
@@ -2565,7 +2810,7 @@ async function bindFormActions() {
             if (templateManagerName) {
                 templateManagerName.value = templateName;
             }
-            await renderTemplateManagerPreview(templateName);
+            await loadTemplateIntoEditor(templateName);
         }
     });
 
@@ -2603,13 +2848,14 @@ async function initPrototype() {
     initDoctorModal();
     bindDoctorControls();
     bindGlobalDrugSearch();
+    bindTemplateDrugSearch();
     bindUpdateControls();
     await loadPrintBlankCss();
     await loadCatalogFromBackend();
     await loadSettingsFromBackend();
     await refreshTemplates();
     await bindTemplateManagerControls();
-    await renderTemplateManagerPreview("");
+    clearTemplateEditor();
     renderDirectoryTable();
     await loadArchivedDrugsFromBackend();
     const startupUpdateStatus = await refreshUpdateStatus({ silent: true });

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from backend.db import DrugRepository
 from backend.seed_loader import load_seed_drugs
 
@@ -125,20 +127,35 @@ def test_template_can_be_deleted(tmp_path: Path):
     repo.initialize()
 
     payload = {
-        "card_number": "",
-        "patient_name": "",
-        "birth_date": "",
-        "doctor_name": "",
+        "card_number": "123",
+        "patient_name": "Иванов",
+        "birth_date": "01.01.1990",
+        "doctor_name": "Петров",
+        "drugs": [
+            {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "37.5 мг", "selectedScheme": "утром", "availability": "Есть"},
+            {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "75 мг", "selectedScheme": "днём"},
+            {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "150 мг", "selectedScheme": "вечером"},
+        ],
+    }
+    repo.save_template("Венлафаксин титрация", payload)
+    stored = repo.get_template("Венлафаксин титрация")
+    assert stored == {
         "drugs": [
             {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "37.5 мг", "selectedScheme": "утром"},
             {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "75 мг", "selectedScheme": "днём"},
             {"mnn": "Venlafaxine", "russian_name": "Венлафаксин", "dosage": "150 мг", "selectedScheme": "вечером"},
         ],
     }
-    repo.save_template("Венлафаксин титрация", payload)
-    assert repo.get_template("Венлафаксин титрация")
 
     result = repo.delete_template("Венлафаксин титрация")
     assert result["ok"] is True
     assert result["deleted"] is True
     assert repo.get_template("Венлафаксин титрация") is None
+
+
+def test_template_save_requires_drugs(tmp_path: Path):
+    repo = DrugRepository(tmp_path / "app.db")
+    repo.initialize()
+
+    with pytest.raises(ValueError, match="at least one drug"):
+        repo.save_template("Пустой", {"drugs": []})
