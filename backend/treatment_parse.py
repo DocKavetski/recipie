@@ -400,19 +400,12 @@ def parse_treatment_text(text: Any, catalog: list[dict[str, Any]]) -> dict[str, 
     index = build_name_index(catalog)
     drugs: list[dict[str, Any]] = []
     unmatched: list[str] = []
-    seen_mnn: set[str] = set()
 
     for line in lines:
         parsed = parse_treatment_line(line, index)
         if not parsed:
             unmatched.append(line)
             continue
-        mnn = str(parsed.get("mnn") or "")
-        if mnn and mnn in seen_mnn:
-            # Дубликат той же МНН — оставляем последнюю схему/дозу
-            drugs = [item for item in drugs if item.get("mnn") != mnn]
-        if mnn:
-            seen_mnn.add(mnn)
         drugs.append(parsed)
 
     if not drugs:

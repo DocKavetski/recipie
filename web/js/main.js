@@ -217,7 +217,12 @@ function buildSchemeClipboardText(drugs) {
                 .filter(Boolean);
             const tradePart = trades.length ? `(${trades.join(", ")})` : "";
             const dosage = String(drug.dosage || "").trim();
-            const head = [form, title, tradePart, dosage].filter(Boolean).join(" ").trim();
+            const rawQty = Number.parseInt(String(drug.dispenseQty || "").trim(), 10);
+            const qty = Number.isFinite(rawQty) && rawQty > 0
+                ? rawQty
+                : extractDefaultDispenseQty(drug.packaging);
+            const qtyPart = qty ? `D.t.d. № ${qty}` : "";
+            const head = [form, title, tradePart, dosage, qtyPart].filter(Boolean).join(" ").trim();
             const scheme = String(drug.selectedScheme || "").trim();
             return scheme ? `${head} — ${scheme}` : head;
         })
@@ -285,6 +290,42 @@ function escapeHtml(value) {
 function extractDefaultDispenseQty(packaging) {
     const match = String(packaging || "").match(/\d+/);
     return match ? Number(match[0]) : 1;
+}
+
+function dispenseStepByPackaging(packaging) {
+    const packQty = extractDefaultDispenseQty(packaging);
+    if (packQty === 28) {
+        return 14;
+    }
+    if (packQty === 30) {
+        return 10;
+    }
+    return 1;
+}
+
+function nearestMultiple(value, step) {
+    const numeric = Number.parseInt(String(value || "").trim(), 10);
+    if (!Number.isFinite(numeric) || numeric < 1) {
+        return step;
+    }
+    if (step <= 1) {
+        return numeric;
+    }
+    return Math.max(step, Math.round(numeric / step) * step);
+}
+
+function syncDispenseConstraints(row, options = {}) {
+    const packagingInput = row.querySelector(".drug-packaging-input");
+    const dispenseInput = row.querySelector(".drug-dispense-input");
+    if (!packagingInput || !dispenseInput) {
+        return;
+    }
+    const step = dispenseStepByPackaging(packagingInput.value);
+    dispenseInput.step = String(step);
+    dispenseInput.min = String(step > 1 ? step : 1);
+    if (options.normalizeValue !== false) {
+        dispenseInput.value = nearestMultiple(dispenseInput.value, step);
+    }
 }
 
 function openPrintPreview(state, pdfPath = "", preview = null) {
@@ -1099,11 +1140,32 @@ function bindTradeSelect(row) {
             if (selectedDetails) {
                 row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;
                 row.querySelector(".drug-dispense-input").value = selectedDetails.dispense_qty || row.querySelector(".drug-dispense-input").value;
+                syncDispenseConstraints(row);
                 setStatus(`Для торгового названия ${selectedTrade} подставлены упаковка и количество.`);
             }
         });
         tradeSelect.dataset.bound = "true";
     }
+}
+
+function bindDispenseConstraints(row) {
+    const packagingInput = row.querySelector(".drug-packaging-input");
+    const dispenseInput = row.querySelector(".drug-dispense-input");
+    if (!packagingInput || !dispenseInput || dispenseInput.dataset.dispenseBound) {
+        return;
+    }
+    packagingInput.addEventListener("change", () => {
+        syncDispenseConstraints(row);
+        scheduleAutosave();
+    });
+    dispenseInput.addEventListener("change", () => {
+        syncDispenseConstraints(row);
+        scheduleAutosave();
+    });
+    dispenseInput.addEventListener("blur", () => {
+        syncDispenseConstraints(row);
+    });
+    dispenseInput.dataset.dispenseBound = "true";
 }
 
 function bindSchemeInput(row) {
@@ -1227,6 +1289,7 @@ function populateRow(row, drug, options = {}) {
         row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;
         row.querySelector(".drug-dispense-input").value = selectedDetails.dispense_qty || extractDefaultDispenseQty(selectedDetails.packaging);
     }
+    syncDispenseConstraints(row);
 }
 
 function hideSearchDropdown() {
@@ -1482,6 +1545,7 @@ function addDrugRow(drug = null, options = {}) {
     row.querySelector(".drug-mode-select").value = options.mode || "mnn";
     bindModeSelect(row);
     bindTradeSelect(row);
+    bindDispenseConstraints(row);
     bindFormDosageSelects(row);
     bindSchemeInput(row);
     bindRowRemoval(row);
@@ -2058,7 +2122,6 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
     const index = buildTreatmentNameIndex(catalog);
     const drugs = [];
     const unmatched = [];
-    const seen = new Set();
 
     for (const line of lines) {
         const { head, scheme: schemeFromSplit } = splitTreatmentHeadAndScheme(line);
@@ -2111,14 +2174,6 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
             matched_as: found.entry.display,
             match_kind: found.entry.kind,
         };
-        if (payload.mnn && seen.has(payload.mnn)) {
-            const filtered = drugs.filter((item) => item.mnn !== payload.mnn);
-            drugs.length = 0;
-            drugs.push(...filtered);
-        }
-        if (payload.mnn) {
-            seen.add(payload.mnn);
-        }
         drugs.push(payload);
     }
 
