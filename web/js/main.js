@@ -314,6 +314,23 @@ function nearestMultiple(value, step) {
     return Math.max(step, Math.round(numeric / step) * step);
 }
 
+function stepAlignedValue(value, step, direction = 0) {
+    const numeric = Number.parseInt(String(value || "").trim(), 10);
+    if (!Number.isFinite(numeric) || numeric < 1) {
+        return step > 1 ? step : 1;
+    }
+    if (step <= 1) {
+        return Math.max(1, numeric + direction);
+    }
+    if (direction > 0) {
+        return Math.max(step, Math.ceil(numeric / step) * step);
+    }
+    if (direction < 0) {
+        return Math.max(step, Math.floor(numeric / step) * step);
+    }
+    return nearestMultiple(numeric, step);
+}
+
 function syncDispenseConstraints(row, options = {}) {
     const packagingInput = row.querySelector(".drug-packaging-input");
     const dispenseInput = row.querySelector(".drug-dispense-input");
@@ -1158,12 +1175,36 @@ function bindDispenseConstraints(row) {
         syncDispenseConstraints(row);
         scheduleAutosave();
     });
+    dispenseInput.addEventListener("input", () => {
+        const step = dispenseStepByPackaging(packagingInput.value);
+        if (step <= 1) {
+            return;
+        }
+        dispenseInput.value = stepAlignedValue(dispenseInput.value, step, 0);
+    });
     dispenseInput.addEventListener("change", () => {
         syncDispenseConstraints(row);
         scheduleAutosave();
     });
     dispenseInput.addEventListener("blur", () => {
         syncDispenseConstraints(row);
+    });
+    dispenseInput.addEventListener("keydown", (event) => {
+        const step = dispenseStepByPackaging(packagingInput.value);
+        if (step <= 1) {
+            return;
+        }
+        if (event.key === "ArrowUp") {
+            event.preventDefault();
+            dispenseInput.value = stepAlignedValue(Number(dispenseInput.value || 0) + step, step, 1);
+            scheduleAutosave();
+            return;
+        }
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            dispenseInput.value = stepAlignedValue(Number(dispenseInput.value || step) - step, step, -1);
+            scheduleAutosave();
+        }
     });
     dispenseInput.dataset.dispenseBound = "true";
 }
