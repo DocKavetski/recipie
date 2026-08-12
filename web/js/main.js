@@ -1219,7 +1219,22 @@ function bindDispenseConstraints(row) {
         if (step <= 1) {
             return;
         }
-        dispenseInput.value = stepAlignedValue(dispenseInput.value, step, 0);
+        const prevRaw = dispenseInput.dataset.prevDispenseValue;
+        const prev = Number.parseInt(String(prevRaw || dispenseInput.value), 10);
+        const current = Number.parseInt(String(dispenseInput.value || ""), 10);
+        if (!Number.isFinite(current) || current < 1) {
+            return;
+        }
+
+        // Если пользователь “нажал +1” (спиннер/колёсико/Enter), то current изменился
+        // в плюс/минус. Округляем в том же направлении к следующей допустимой кратности.
+        let direction = 0;
+        if (Number.isFinite(prev)) {
+            if (current > prev) direction = 1;
+            if (current < prev) direction = -1;
+        }
+        dispenseInput.value = stepAlignedValue(dispenseInput.value, step, direction);
+        dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
     });
     dispenseInput.addEventListener("change", () => {
         syncDispenseConstraints(row);
@@ -1236,16 +1251,19 @@ function bindDispenseConstraints(row) {
         if (event.key === "ArrowUp") {
             event.preventDefault();
             dispenseInput.value = stepAlignedValue(Number(dispenseInput.value || 0) + step, step, 1);
+            dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
             scheduleAutosave();
             return;
         }
         if (event.key === "ArrowDown") {
             event.preventDefault();
             dispenseInput.value = stepAlignedValue(Number(dispenseInput.value || step) - step, step, -1);
+            dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
             scheduleAutosave();
         }
     });
     dispenseInput.dataset.dispenseBound = "true";
+    dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value || "");
 }
 
 function bindSchemeInput(row) {
