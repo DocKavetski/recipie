@@ -486,15 +486,18 @@ function syncDispenseConstraints(row, options = {}) {
         return;
     }
     const step = dispenseStepByPackaging(packagingInput.value);
-    dispenseInput.step = String(step);
-    dispenseInput.min = String(step > 1 ? step : 1);
+    dispenseInput.dataset.dispenseStep = String(step);
     if (options.stepChange) {
         const previousStep = Number.parseInt(String(options.previousStep || ""), 10) || 1;
         dispenseInput.value = roundDispenseForStepChange(dispenseInput.value, previousStep, step);
     } else if (options.normalizeValue !== false) {
-        dispenseInput.value = nearestMultiple(dispenseInput.value, step);
+        const raw = String(dispenseInput.value || "").trim();
+        if (!raw) {
+            dispenseInput.value = String(step > 1 ? step : 1);
+        } else {
+            dispenseInput.value = nearestMultiple(dispenseInput.value, step);
+        }
     }
-    dispenseInput.dataset.dispenseStep = String(step);
 }
 
 function openPrintPreview(state, pdfPath = "", preview = null) {
@@ -1352,34 +1355,18 @@ function bindDispenseConstraints(row) {
         syncDispenseConstraints(row, { stepChange: true, previousStep });
         scheduleAutosave();
     });
-    dispenseInput.addEventListener("input", () => {
-        const step = dispenseStepByPackaging(packagingInput.value);
-        if (step <= 1) {
-            return;
-        }
-        const prevRaw = dispenseInput.dataset.prevDispenseValue;
-        const prev = Number.parseInt(String(prevRaw || dispenseInput.value), 10);
-        const current = Number.parseInt(String(dispenseInput.value || ""), 10);
-        if (!Number.isFinite(current) || current < 1) {
-            return;
-        }
-
-        // Если пользователь “нажал +1” (спиннер/колёсико/Enter), то current изменился
-        // в плюс/минус. Округляем в том же направлении к следующей допустимой кратности.
-        let direction = 0;
-        if (Number.isFinite(prev)) {
-            if (current > prev) direction = 1;
-            if (current < prev) direction = -1;
-        }
-        dispenseInput.value = stepAlignedValue(dispenseInput.value, step, direction);
-        dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
+    dispenseInput.addEventListener("focus", () => {
+        dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value || "");
     });
     dispenseInput.addEventListener("change", () => {
         syncDispenseConstraints(row);
+        dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value || "");
         scheduleAutosave();
     });
     dispenseInput.addEventListener("blur", () => {
         syncDispenseConstraints(row);
+        dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value || "");
+        scheduleAutosave();
     });
     dispenseInput.addEventListener("keydown", (event) => {
         const step = dispenseStepByPackaging(packagingInput.value);
@@ -1388,14 +1375,16 @@ function bindDispenseConstraints(row) {
         }
         if (event.key === "ArrowUp") {
             event.preventDefault();
-            dispenseInput.value = stepAlignedValue(Number(dispenseInput.value || 0) + step, step, 1);
+            const base = Number.parseInt(String(dispenseInput.value || "0"), 10) || 0;
+            dispenseInput.value = stepAlignedValue(base + step, step, 1);
             dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
             scheduleAutosave();
             return;
         }
         if (event.key === "ArrowDown") {
             event.preventDefault();
-            dispenseInput.value = stepAlignedValue(Number(dispenseInput.value || step) - step, step, -1);
+            const base = Number.parseInt(String(dispenseInput.value || String(step)), 10) || step;
+            dispenseInput.value = stepAlignedValue(base - step, step, -1);
             dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
             scheduleAutosave();
         }
