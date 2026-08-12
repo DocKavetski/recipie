@@ -237,8 +237,8 @@ class TestValidate:
             }
         ]
         result = validate_prescription_payload(self._payload(drugs=drugs))
-        assert result.ok
-        assert any("кратно 14" in warning for warning in result.warnings)
+        assert not result.ok
+        assert any("кратно 14" in error for error in result.errors)
 
     def test_normalize_filters_empty_drugs(self):
         payload = self._payload(drugs=[{"mnn": ""}, {"mnn": "X", "dispenseQty": None}])
