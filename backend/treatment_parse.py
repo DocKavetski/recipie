@@ -311,9 +311,14 @@ def drug_payload_from_match(
     dose = pick_catalog_dosage(drug, dosage, form)
     selected_trade = entry.display if entry.kind == "trade" else ""
     mode = "trade" if selected_trade else "mnn"
+    # "packaging" (фасовка) берём из базы и/или trade_details,
+    # а "dispenseQty" (D.t.d.) — это количество для выдачи.
+    # Их нельзя смешивать: шаг листания D.t.d. зависит именно от фасовки.
     packaging = drug.get("packaging") or ""
-    if dispense_qty:
-        packaging = f"N{dispense_qty}"
+    trade_details = drug.get("trade_details") or {}
+    if selected_trade and isinstance(trade_details, dict):
+        selected_details = trade_details.get(selected_trade) or {}
+        packaging = selected_details.get("packaging") or packaging
     payload = {
         "mnn": drug.get("mnn"),
         "russian_name": drug.get("russian_name"),
@@ -333,7 +338,7 @@ def drug_payload_from_match(
         "matched_as": entry.display,
         "match_kind": entry.kind,
     }
-    if dispense_qty:
+    if dispense_qty is not None:
         payload["dispenseQty"] = dispense_qty
     return payload
 

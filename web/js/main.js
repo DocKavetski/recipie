@@ -2260,11 +2260,19 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
         const dosage = pickTreatmentDosage(found.entry.drug, doseExtract.dosage || dose2.dosage, form);
         const drug = found.entry.drug;
         const selectedTrade = found.entry.kind === "trade" ? found.entry.display : "";
+
+        // Фасовка берётся из базы (и trade_details при режиме trade),
+        // а D.t.d. (№...) — это именно количество, а не фасовка.
+        let packaging = drug.packaging || "";
+        const tradeDetails = drug.trade_details || {};
+        if (selectedTrade && tradeDetails && tradeDetails[selectedTrade]?.packaging) {
+            packaging = tradeDetails[selectedTrade].packaging;
+        }
         const payload = {
             ...drug,
             drug_form: form,
             dosage,
-            packaging: packQty ? `N${packQty}` : (drug.packaging || ""),
+            packaging,
             dispenseQty: packQty || undefined,
             selectedTrade,
             selectedScheme: cleanTreatmentSchemeLocal(scheme),

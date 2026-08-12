@@ -186,3 +186,17 @@ def test_duplicate_mnn_lines_are_preserved(tmp_path: Path):
     assert result["drugs"][1]["mnn"] == "Venlafaxine"
     assert result["drugs"][0]["dosage"] == "75 мг"
     assert result["drugs"][1]["dosage"] == "150 мг"
+
+
+def test_trade_packaging_not_overwritten_by_dispense_qty(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    # У «Венлаксор» в каталоге фасовка N30, но в тексте стоит D.t.d. (№28).
+    # D.t.d. нельзя использовать как фасовку.
+    text = "Венлаксор 75 мг по 1 т утром (№28)"
+    result = parse_treatment_text(text, catalog)
+    assert result["ok"] is True
+    assert len(result["drugs"]) == 1
+    drug = result["drugs"][0]
+    assert drug["selectedTrade"] == "Венлаксор"
+    assert drug["dispenseQty"] == 28
+    assert drug["packaging"] == "N30"
