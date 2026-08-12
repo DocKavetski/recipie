@@ -331,6 +331,23 @@ function stepAlignedValue(value, step, direction = 0) {
     return nearestMultiple(numeric, step);
 }
 
+function roundDispenseForStepChange(value, previousStep, nextStep) {
+    const numeric = Number.parseInt(String(value || "").trim(), 10);
+    if (!Number.isFinite(numeric) || numeric < 1) {
+        return nextStep > 1 ? nextStep : 1;
+    }
+    if (nextStep <= 1) {
+        return Math.max(1, numeric);
+    }
+    if (previousStep > nextStep) {
+        return Math.max(nextStep, Math.ceil(numeric / nextStep) * nextStep);
+    }
+    if (previousStep < nextStep) {
+        return Math.max(nextStep, Math.floor(numeric / nextStep) * nextStep);
+    }
+    return nearestMultiple(numeric, nextStep);
+}
+
 function syncDispenseConstraints(row, options = {}) {
     const packagingInput = row.querySelector(".drug-packaging-input");
     const dispenseInput = row.querySelector(".drug-dispense-input");
@@ -340,9 +357,13 @@ function syncDispenseConstraints(row, options = {}) {
     const step = dispenseStepByPackaging(packagingInput.value);
     dispenseInput.step = String(step);
     dispenseInput.min = String(step > 1 ? step : 1);
-    if (options.normalizeValue !== false) {
+    if (options.stepChange) {
+        const previousStep = Number.parseInt(String(options.previousStep || ""), 10) || 1;
+        dispenseInput.value = roundDispenseForStepChange(dispenseInput.value, previousStep, step);
+    } else if (options.normalizeValue !== false) {
         dispenseInput.value = nearestMultiple(dispenseInput.value, step);
     }
+    dispenseInput.dataset.dispenseStep = String(step);
 }
 
 function openPrintPreview(state, pdfPath = "", preview = null) {
@@ -1172,7 +1193,8 @@ function bindDispenseConstraints(row) {
         return;
     }
     packagingInput.addEventListener("change", () => {
-        syncDispenseConstraints(row);
+        const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
+        syncDispenseConstraints(row, { stepChange: true, previousStep });
         scheduleAutosave();
     });
     dispenseInput.addEventListener("input", () => {
