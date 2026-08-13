@@ -1179,6 +1179,26 @@ function updateDirectoryAvailabilityMeta() {
     meta.textContent = "Наличие ещё не проверялось — нажмите «Проверить наличие».";
 }
 
+function formatTradeCatalogLabel(drug) {
+    const details = drug.trade_details || {};
+    const names = asStringList(drug.trade_names);
+    if (!names.length) {
+        return "";
+    }
+    return names.map((name) => {
+        const doses = dosagesForTrade(details, name);
+        if (!doses.length) {
+            return name;
+        }
+        const parts = doses.map((dose) => {
+            const match = resolveTradePackaging(details, name, dose);
+            const pack = match?.packaging ? ` ${match.packaging}` : "";
+            return `${dose}${pack}`;
+        });
+        return `${name} (${parts.join(", ")})`;
+    }).join("; ");
+}
+
 function renderDirectoryTable() {
     if (!directoryTableBody) {
         return;
@@ -1211,7 +1231,7 @@ function renderDirectoryTable() {
             <td>${escapeHtml(asStringList(drug.form_options || [drug.drug_form]).join(", "))}</td>
             <td>${escapeHtml(asStringList(drug.dosage_options || [drug.dosage]).join(", "))}</td>
             <td>${escapeHtml(optionLabel(drug.packaging))}</td>
-            <td>${escapeHtml(asStringList(drug.trade_names).join(", "))}</td>
+            <td>${escapeHtml(formatTradeCatalogLabel(drug))}</td>
             ${availabilityCell}
             ${deleteCell}
         `;
@@ -1280,6 +1300,33 @@ function updateCatalogDrugSchemes(mnn, schemeOptions, hasCustomScheme = true) {
     });
 }
 
+function syncRowDosageOptions(row, options = {}) {
+    const formSelect = row.querySelector(".drug-form-select");
+    const dosageSelect = row.querySelector(".drug-dosage-select");
+    const modeSelect = row.querySelector(".drug-mode-select");
+    const tradeSelect = row.querySelector(".drug-trade-select");
+    if (!dosageSelect) {
+        return false;
+    }
+    let doses = dosagesForForm(row, formSelect?.value || "");
+    const isTradeMode = modeSelect?.value === "trade";
+    const selectedTrade = tradeSelect?.value || "";
+    const details = JSON.parse(row.dataset.tradeDetails || "{}");
+    if (isTradeMode && selectedTrade) {
+        doses = filterDosagesForTrade(doses, details, selectedTrade);
+    }
+    let keep = doses.includes(dosageSelect.value) ? dosageSelect.value : "";
+    if (!keep) {
+        keep = dosageFromTradeName(selectedTrade, doses) || doses[0] || "";
+    }
+    fillOptions(dosageSelect, doses, keep);
+    const packagingOptions = { stepChange: true, keepDispenseQty: options.keepDispenseQty !== false };
+    if (isTradeMode) {
+        return applyTradePackagingToRow(row, packagingOptions);
+    }
+    return applyMnnPackagingToRow(row, packagingOptions);
+}
+
 function syncTradeAvailability(row, announceChange) {
     const modeSelect = row.querySelector(".drug-mode-select");
     const tradeSelect = row.querySelector(".drug-trade-select");
@@ -1287,12 +1334,10 @@ function syncTradeAvailability(row, announceChange) {
     tradeSelect.disabled = !isTradeMode;
 
     if (announceChange) {
-        const packagingOptions = { stepChange: true };
+        syncRowDosageOptions(row, { keepDispenseQty: true });
         if (isTradeMode) {
-            applyTradePackagingToRow(row, packagingOptions);
-            setStatus("Режим выписки переключен на торговое название.");
+            setStatus("Режим выписки переключен на торговое название. Дозировки — только для выбранного препарата.");
         } else {
-            applyMnnPackagingToRow(row, packagingOptions);
             setStatus("Режим выписки переключен на МНН — подставлена максимальная фасовка для дозировки.");
         }
         scheduleAutosave();
@@ -1312,34 +1357,11 @@ function bindTradeSelect(row) {
     const tradeSelect = row.querySelector(".drug-trade-select");
     if (!tradeSelect.dataset.bound) {
         tradeSelect.addEventListener("change", () => {
-            const details = JSON.parse(row.dataset.tradeDetails || "{}");
             const selectedTrade = tradeSelect.value;
-            const selectedDetails = resolveTradePackaging(
-                details,
-                selectedTrade,
-                row.querySelector(".drug-dosage-select")?.value || "",
-            );
-
-            if (selectedDetails) {
-                const packagingInput = row.querySelector(".drug-packaging-input");
-                const dispenseInput = row.querySelector(".drug-dispense-input");
-                if (!packagingInput || !dispenseInput) {
-                    return;
-                }
-
-                const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
-
-                packagingInput.value = selectedDetails.packaging || packagingInput.value;
-
-                const numeric = Number.parseInt(String(dispenseInput.value || "").trim(), 10);
-                const hasValidNumber = Number.isFinite(numeric) && numeric > 0;
-                if (!hasValidNumber) {
-                    dispenseInput.value = selectedDetails.dispense_qty || dispenseInput.value;
-                }
-
-                syncDispenseConstraints(row, { stepChange: true, previousStep });
-                setStatus(`Для ${selectedTrade} ${row.querySelector(".drug-dosage-select")?.value || ""} подставлены упаковка и количество.`.trim());
-            }
+            syncRowDosageOptions(row, { keepDispenseQty: true });
+            const dosage = row.querySelector(".drug-dosage-select")?.value || "";
+            setStatus(`Для ${selectedTrade} доступна дозировка ${dosage}; подставлены упаковка и фасовка.`.trim());
+            scheduleAutosave();
         });
         tradeSelect.dataset.bound = "true";
     }
@@ -1401,9 +1423,7 @@ function bindFormDosageSelects(row) {
     const dosageSelect = row.querySelector(".drug-dosage-select");
     if (!formSelect.dataset.bound) {
         formSelect.addEventListener("change", () => {
-            const doses = dosagesForForm(row, formSelect.value);
-            const keep = doses.includes(dosageSelect.value) ? dosageSelect.value : (doses[0] || "");
-            fillOptions(dosageSelect, doses, keep);
+            syncRowDosageOptions(row, { keepDispenseQty: true });
             setStatus(`Форма: ${formSelect.value}. Доступные дозировки обновлены.`);
             scheduleAutosave();
         });
@@ -1474,19 +1494,29 @@ function populateRow(row, drug, options = {}) {
     const dosesForSelected = asStringList(
         formDosageMap[selectedForm] || drug.dosage_options || (drug.dosage ? [drug.dosage] : []),
     );
-    const selectedDosage = options.dosage || drug.dosage || dosesForSelected[0] || "";
-    fillOptions(dosageSelect, dosesForSelected, selectedDosage);
-
     const tradeSelect = row.querySelector(".drug-trade-select");
     const selectedTrade = options.selectedTrade || "";
     fillOptions(tradeSelect, asStringList(drug.trade_names || []), selectedTrade);
+    const rowMode = options.mode || (selectedTrade ? "trade" : "mnn");
+    const dosesForTrade = rowMode === "trade" && selectedTrade
+        ? filterDosagesForTrade(dosesForSelected, drug.trade_details || {}, selectedTrade)
+        : dosesForSelected;
+    const selectedDosage = (
+        (options.dosage && dosesForTrade.includes(options.dosage) ? options.dosage : "")
+        || dosageFromTradeName(selectedTrade, dosesForTrade)
+        || (dosesForTrade.includes(drug.dosage) ? drug.dosage : "")
+        || dosesForTrade[0]
+        || options.dosage
+        || drug.dosage
+        || ""
+    );
+    fillOptions(dosageSelect, dosesForTrade, selectedDosage);
     fillSchemeOptions(
         row,
         drug.scheme_options || [],
         options.selectedScheme || drug.selectedScheme || drug.scheme_options?.[0] || "",
     );
 
-    const rowMode = options.mode || (selectedTrade ? "trade" : "mnn");
     const selectedDetails = rowMode === "trade" && selectedTrade
         ? resolveTradePackaging(drug.trade_details || {}, selectedTrade, selectedDosage)
         : resolveMnnPackaging(drug.trade_details || {}, selectedDosage, drug.packaging || "");
@@ -1760,7 +1790,7 @@ function addDrugRow(drug = null, options = {}, container = drugRowsContainer) {
     const row = fragment.querySelector(".drug-row");
 
     populateRow(row, drug || createEmptyRowData(), options);
-    row.querySelector(".drug-mode-select").value = options.mode || "mnn";
+    row.querySelector(".drug-mode-select").value = options.mode || (options.selectedTrade ? "trade" : "mnn");
     bindModeSelect(row);
     bindTradeSelect(row);
     bindDispenseConstraints(row);
@@ -2341,9 +2371,16 @@ function pickTreatmentForm(drug, requested) {
     return drug.drug_form || options[0];
 }
 
-function pickTreatmentDosage(drug, requested, form) {
+function pickTreatmentDosage(drug, requested, form, trade = "") {
     const mapped = drug.form_dosage_map?.[form];
-    const options = (mapped || drug.dosage_options || []).map((item) => String(item).trim()).filter(Boolean);
+    let options = (mapped || drug.dosage_options || []).map((item) => String(item).trim()).filter(Boolean);
+    const tradeDoses = trade ? dosagesForTrade(drug.trade_details || {}, trade) : [];
+    if (tradeDoses.length) {
+        options = filterDosagesForTrade(options, drug.trade_details || {}, trade);
+    }
+    if (!requested && trade) {
+        requested = dosageFromTradeName(trade, options.length ? options : tradeDoses);
+    }
     if (!options.length) {
         return requested || drug.dosage || "";
     }
@@ -2360,7 +2397,13 @@ function pickTreatmentDosage(drug, requested, form) {
                 return partial;
             }
         }
+        if (tradeDoses.length) {
+            return dosageFromTradeName(trade, options) || options[0];
+        }
         return requested;
+    }
+    if (tradeDoses.length) {
+        return options[0];
     }
     return drug.dosage || options[0];
 }
@@ -2383,10 +2426,13 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
         working = packExtract.line;
         const formExtract = extractTreatmentFormLocal(working);
         working = formExtract.line;
+        const headBeforeDose = working;
         const doseExtract = extractTreatmentDoseLocal(working);
         working = doseExtract.line;
         const found = findTreatmentDrugInLine(stripTreatmentParentheticalsLocal(working) || working, index)
-            || findTreatmentDrugInLine(working, index);
+            || findTreatmentDrugInLine(working, index)
+            || findTreatmentDrugInLine(stripTreatmentParentheticalsLocal(headBeforeDose) || headBeforeDose, index)
+            || findTreatmentDrugInLine(headBeforeDose, index);
         if (!found) {
             unmatched.push(line);
             continue;
@@ -2410,9 +2456,9 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
             scheme = extractTreatmentSchemeLocal(stripTreatmentParentheticalsLocal(pack3.line) || pack3.line);
         }
         const form = pickTreatmentForm(found.entry.drug, formExtract.form || form2.form);
-        const dosage = pickTreatmentDosage(found.entry.drug, doseExtract.dosage || dose2.dosage, form);
         const drug = found.entry.drug;
         const selectedTrade = found.entry.kind === "trade" ? found.entry.display : "";
+        const dosage = pickTreatmentDosage(found.entry.drug, doseExtract.dosage || dose2.dosage, form, selectedTrade);
         const mode = selectedTrade ? "trade" : "mnn";
         const packagingMatch = resolvePackagingForDrug(drug, mode, selectedTrade, dosage);
         const packaging = packagingMatch?.packaging || drug.packaging || "";

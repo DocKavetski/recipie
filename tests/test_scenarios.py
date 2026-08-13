@@ -9,7 +9,7 @@ import pytest
 from backend.db import DrugRepository
 from backend.dispense_rules import dispense_step_by_packaging, is_valid_dispense_qty
 from backend.seed_loader import load_seed_drugs
-from backend.trade_packaging import resolve_mnn_packaging, resolve_trade_packaging
+from backend.trade_packaging import dosages_for_trade, resolve_mnn_packaging, resolve_trade_packaging
 from backend.treatment_parse import parse_treatment_text
 from backend.validate import validate_prescription_payload
 
@@ -58,6 +58,25 @@ class TestSertralinePackagingScenarios:
         mnn = resolve_mnn_packaging(details, "100 мг", sertraline["packaging"])
         assert trade["packaging"] == "N28"
         assert mnn["packaging"] == "N30"
+
+
+class TestQuetiapineTradeDosages:
+    def test_kutipin_200_parse_and_pack(self, tmp_path: Path):
+        catalog = _catalog(tmp_path)
+        result = parse_treatment_text("Кутипин 200 мг на ночь", catalog)
+        drug = result["drugs"][0]
+        assert drug["selectedTrade"] == "Кутипин 200"
+        assert drug["dosage"] == "200 мг"
+        assert drug["packaging"] == "N30"
+        quetiapine = next(item for item in catalog if item["mnn"] == "Quetiapine")
+        assert dosages_for_trade(quetiapine["trade_details"], "Кутипин 200") == ["200 мг"]
+        assert resolve_trade_packaging(quetiapine["trade_details"], "Кутипин 200", "25 мг") is None
+
+    def test_kutipin_25_does_not_offer_200(self, tmp_path: Path):
+        catalog = _catalog(tmp_path)
+        quetiapine = next(item for item in catalog if item["mnn"] == "Quetiapine")
+        assert dosages_for_trade(quetiapine["trade_details"], "Кутипин 25") == ["25 мг"]
+        assert resolve_trade_packaging(quetiapine["trade_details"], "Кутипин 25", "200 мг") is None
 
 
 class TestDispenseValidationScenarios:

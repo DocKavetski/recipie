@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from backend.seed_loader import load_seed_drugs
 from backend.trade_packaging import (
+    dosage_from_trade_name,
+    dosages_for_trade,
     normalize_trade_details,
     resolve_mnn_packaging,
     resolve_trade_packaging,
@@ -92,3 +94,46 @@ def test_trade_details_from_variants():
         },
     ])
     assert details["Стимулотон"]["100 мг"]["packaging"] == "N28"
+
+
+def test_kutipin_trade_has_only_its_own_dosage():
+    quetiapine = next(item for item in load_seed_drugs() if item["mnn"] == "Quetiapine")
+    details = quetiapine["trade_details"]
+    assert dosages_for_trade(details, "Кутипин 200") == ["200 мг"]
+    assert dosages_for_trade(details, "Кутипин 25") == ["25 мг"]
+    assert resolve_trade_packaging(details, "Кутипин 200", "200 мг")["packaging"] == "N30"
+    assert resolve_trade_packaging(details, "Кутипин 25", "25 мг")["packaging"] == "N30"
+    assert resolve_trade_packaging(details, "Кутипин 200", "25 мг") is None
+    assert resolve_trade_packaging(details, "Кутипин 25", "200 мг") is None
+    assert resolve_trade_packaging(details, "Кутипин 200", "")["packaging"] == "N30"
+    assert dosage_from_trade_name("Кутипин 200", ["25 мг", "200 мг"]) == "200 мг"
+    assert dosage_from_trade_name("Кутипин 25", ["25 мг", "200 мг"]) == "25 мг"
+
+
+def test_ketilept_keeps_both_dosages_with_own_packs():
+    quetiapine = next(item for item in load_seed_drugs() if item["mnn"] == "Quetiapine")
+    details = quetiapine["trade_details"]
+    assert set(dosages_for_trade(details, "Кетилепт")) == {"25 мг", "200 мг"}
+    assert resolve_trade_packaging(details, "Кетилепт", "25 мг")["packaging"] == "N30"
+    assert resolve_trade_packaging(details, "Кетилепт", "200 мг")["packaging"] == "N60"
+
+
+def test_every_seed_trade_has_only_its_own_packaging():
+    for drug in load_seed_drugs():
+        details = drug.get("trade_details") or {}
+        for trade in drug.get("trade_names") or []:
+            doses = dosages_for_trade(details, trade)
+            if not doses:
+                continue
+            for dose in doses:
+                match = resolve_trade_packaging(details, trade, dose)
+                assert match is not None, f"{drug['mnn']} {trade} {dose}"
+                assert str(match.get("packaging") or "").strip(), f"{drug['mnn']} {trade} {dose}"
+            foreign = [
+                option for option in (drug.get("dosage_options") or [])
+                if option not in doses
+            ]
+            for dose in foreign:
+                assert resolve_trade_packaging(details, trade, dose) is None, (
+                    f"{drug['mnn']} {trade} should not accept {dose}"
+                )
