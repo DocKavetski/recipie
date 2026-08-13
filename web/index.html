@@ -309,19 +309,16 @@
                         <div>
                             <div class="panel-title mb-0">Наличие в Минске</div>
                             <div class="stub-note">
-                                Данные с tabletka.by по аптекам Минска. На вкладке «Рецепт» колонка «Наличие»
-                                обновляется сама при добавлении препарата. Здесь — массовая проверка справочника.
+                                Наличие в Минске проверяется один раз в день при первом запуске программы.
+                                При добавлении препарата в рецепт берётся сегодняшний кэш — без повторных запросов.
                             </div>
                         </div>
-                        <button class="btn btn-sm btn-primary" id="refreshAvailabilityBtn" type="button">
-                            <i class="fa-solid fa-pills me-1"></i>Проверить справочник
+                        <button class="btn btn-sm btn-outline-secondary" id="refreshAvailabilityBtn" type="button">
+                            <i class="fa-solid fa-pills me-1"></i>Показать сегодня
                         </button>
                     </div>
                     <div class="availability-howto text-muted small mb-3">
-                        <ol class="mb-0 ps-3">
-                            <li>Откройте вкладку <strong>Рецепт</strong>, найдите препарат и добавьте его — справа появится статус «Есть / Мало / Нет».</li>
-                            <li>Или нажмите <strong>Проверить справочник</strong> ниже: приложение опросит tabletka.by по первым препаратам каталога (может занять 20–60 сек).</li>
-                        </ol>
+                        Утренний опрос tabletka.by идёт в фоне. Повторный запуск в тот же день кэш не обновляет.
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm table-striped align-middle mb-0">
@@ -397,10 +394,7 @@
                     <div class="col-12 col-lg-6">
                         <div class="panel-box h-100">
                             <div class="panel-title">Поведение</div>
-                            <div class="form-check mt-2">
-                                <input class="form-check-input" type="checkbox" id="autoAvailabilityOnAdd" checked>
-                                <label class="form-check-label" for="autoAvailabilityOnAdd">Проверять наличие при добавлении препарата в рецепт</label>
-                            </div>
+                            <div class="stub-note mt-2">Наличие в аптеках проверяется один раз в день при первом запуске.</div>
                             <div class="form-check mt-2">
                                 <input class="form-check-input" type="checkbox">
                                 <label class="form-check-label">Быстрая печать без диалога</label>

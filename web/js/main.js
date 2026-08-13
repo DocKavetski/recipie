@@ -53,6 +53,7 @@ let searchActiveIndex = 0;
 let latestUpdateStatus = null;
 let printBlankCssText = "";
 let autoUpdateStarted = false;
+let dailyAvailability = { date: "", fresh: false, checking: false, rows: [], byKey: {} };
 
 const DUPLEX_BACK_SLOT = [1, 0, 3, 2];
 const PRINT_CUT_MARKS_HTML = `
@@ -904,6 +905,82 @@ function availabilityMeta(status) {
     return { label: "Есть", className: "status-good" };
 }
 
+function availabilityKey(value) {
+    return String(value || "").trim().toLowerCase().replace(/ё/g, "е");
+}
+
+function indexDailyAvailability(payload) {
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const byKey = {};
+    for (const row of rows) {
+        for (const key of [row.mnn, row.russian_name]) {
+            const normalized = availabilityKey(key);
+            if (normalized) {
+                byKey[normalized] = row;
+            }
+        }
+    }
+    dailyAvailability = {
+        date: payload?.date || "",
+        fresh: Boolean(payload?.fresh),
+        checking: Boolean(payload?.checking),
+        rows,
+        byKey,
+        message: payload?.message || "",
+    };
+    return dailyAvailability;
+}
+
+function cachedAvailabilityForRow(row, query = null) {
+    const request = query
+        ? { query, aliases: [] }
+        : rowAvailabilityQuery(row);
+    const names = [request.query, ...(request.aliases || [])];
+    if (row) {
+        names.push(
+            row.querySelector(".drug-mnn-input")?.value,
+            row.querySelector(".drug-russian-input")?.value,
+            row.querySelector(".drug-latin-input")?.value,
+        );
+    }
+    for (const name of names) {
+        const hit = dailyAvailability.byKey[availabilityKey(name)];
+        if (hit) {
+            return hit;
+        }
+    }
+    return null;
+}
+
+function applyCachedAvailabilityToRow(row, query = null) {
+    const badge = row.querySelector(".drug-availability-badge");
+    const cached = cachedAvailabilityForRow(row, query);
+    if (cached) {
+        setAvailabilityBadge(row, cached.status || "unknown");
+        if (badge) {
+            badge.title = cached.message || cached.label || "Наличие на сегодня (кэш)";
+            if (cached.label && cached.status !== "good" && cached.status !== "low" && cached.status !== "none") {
+                badge.textContent = cached.label;
+            }
+        }
+        return cached;
+    }
+    setAvailabilityBadge(row, "unknown");
+    if (badge) {
+        badge.textContent = dailyAvailability.checking ? "…" : "—";
+        badge.title = dailyAvailability.checking
+            ? "Идёт утренняя проверка наличия…"
+            : "Наличие проверяется раз в день при первом запуске";
+    }
+    return null;
+}
+
+function applyCachedAvailabilityToAllRows() {
+    Array.from(document.querySelectorAll(".drug-row")).forEach((row) => {
+        applyCachedAvailabilityToRow(row);
+    });
+}
+
 function availabilityFromLabel(label) {
     const text = String(label || "").trim();
     if (text === "Мало") {
@@ -1440,94 +1517,65 @@ function rowAvailabilityQuery(row) {
 }
 
 async function refreshRowAvailability(row, query = null) {
-    const autoCheck = document.getElementById("autoAvailabilityOnAdd");
-    if (autoCheck && !autoCheck.checked) {
-        setAvailabilityBadge(row, "none");
-        const badge = row.querySelector(".drug-availability-badge");
-        if (badge) {
-            badge.textContent = "—";
-            badge.title = "Автопроверка отключена в Настройках";
-        }
-        return;
-    }
-    if (!window.eel || typeof window.eel.check_drug_availability !== "function") {
-        return;
-    }
-    const request = query
-        ? { query, aliases: [] }
-        : rowAvailabilityQuery(row);
-    if (!request.query) {
-        return;
-    }
-    setAvailabilityBadge(row, "unknown");
-    const badge = row.querySelector(".drug-availability-badge");
-    if (badge) {
-        badge.textContent = "…";
-        badge.title = "Проверяю tabletka.by…";
+    applyCachedAvailabilityToRow(row, query);
+}
+
+async function loadDailyAvailability({ start = false, force = false } = {}) {
+    if (!window.eel) {
+        return dailyAvailability;
     }
     try {
-        const result = await window.eel.check_drug_availability(request.query, request.aliases)();
-        if (result && result.status) {
-            setAvailabilityBadge(row, result.status);
-            if (result.label && result.status !== "good" && result.status !== "low" && result.status !== "none") {
-                badge.textContent = result.label;
-            }
-            if (badge) {
-                badge.title = result.message || result.label || "";
-            }
-            setStatus(`${request.query}: ${result.label} (${result.pharmacies_minsk || 0} аптек в Минске)`);
+        if (start && typeof window.eel.ensure_daily_availability === "function") {
+            indexDailyAvailability(await window.eel.ensure_daily_availability(force)());
+        } else if (typeof window.eel.get_daily_availability === "function") {
+            indexDailyAvailability(await window.eel.get_daily_availability()());
         }
     } catch (error) {
-        console.error(error);
-        if (badge) {
-            badge.textContent = "?";
-            badge.title = "Не удалось проверить tabletka.by";
-        }
+        console.warn("daily availability failed", error);
     }
+    applyCachedAvailabilityToAllRows();
+    return dailyAvailability;
+}
+
+async function waitForDailyAvailability(timeoutMs = 90000) {
+    const started = Date.now();
+    await loadDailyAvailability({ start: true });
+    while (dailyAvailability.checking && Date.now() - started < timeoutMs) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        await loadDailyAvailability();
+    }
+    if (dailyAvailability.fresh) {
+        setStatus(dailyAvailability.message || `Наличие на сегодня: ${dailyAvailability.rows.length} препаратов.`);
+    } else if (dailyAvailability.checking) {
+        setStatus("Проверка наличия ещё идёт в фоне — статусы появятся сами.");
+    }
+    return dailyAvailability;
 }
 
 async function refreshAvailabilityTable() {
     const body = document.getElementById("availabilityTableBody");
-    const button = document.getElementById("refreshAvailabilityBtn");
     if (!body) {
         return;
     }
-    if (!window.eel || typeof window.eel.refresh_catalog_availability !== "function") {
-        body.innerHTML = "<tr><td colspan=\"4\">Backend недоступен</td></tr>";
+    await loadDailyAvailability();
+    const rows = dailyAvailability.rows || [];
+    if (dailyAvailability.checking && !rows.length) {
+        body.innerHTML = "<tr><td colspan=\"4\">Идёт утренняя проверка tabletka.by…</td></tr>";
         return;
     }
-
-    if (button) {
-        button.disabled = true;
+    if (!rows.length) {
+        body.innerHTML = "<tr><td colspan=\"4\" class=\"text-muted\">Наличие ещё не проверено сегодня. Перезапустите программу утром — проверка запустится сама.</td></tr>";
+        return;
     }
-    body.innerHTML = "<tr><td colspan=\"4\">Проверяю tabletka.by…</td></tr>";
-    setStatus("Проверка наличия в Минске…");
-
-    try {
-        const payload = await window.eel.refresh_catalog_availability(15)();
-        const rows = payload?.rows || [];
-        if (!rows.length) {
-            body.innerHTML = "<tr><td colspan=\"4\">Нет данных</td></tr>";
-            return;
-        }
-        body.innerHTML = rows.map((row) => `
-            <tr>
-                <td>${escapeHtml(row.russian_name)}</td>
-                <td><span class="status-badge ${availabilityMeta(row.status).className}">${escapeHtml(row.label)}</span></td>
-                <td>${escapeHtml(row.pharmacies_minsk)}</td>
-                <td>${escapeHtml(row.message || "")}</td>
-            </tr>
-        `).join("");
-        setStatus(`Наличие обновлено для ${rows.length} препаратов (Минск).`);
-    } catch (error) {
-        console.error(error);
-        body.innerHTML = "<tr><td colspan=\"4\">Ошибка запроса к tabletka.by</td></tr>";
-        setStatus("Не удалось обновить наличие.");
-    } finally {
-        if (button) {
-            button.disabled = false;
-        }
-    }
+    body.innerHTML = rows.map((row) => `
+        <tr>
+            <td>${escapeHtml(row.russian_name)}</td>
+            <td><span class="status-badge ${availabilityMeta(row.status).className}">${escapeHtml(row.label)}</span></td>
+            <td>${escapeHtml(row.pharmacies_minsk)}</td>
+            <td>${escapeHtml(row.message || "")}</td>
+        </tr>
+    `).join("");
+    setStatus(dailyAvailability.message || `Наличие на сегодня: ${rows.length} препаратов.`);
 }
 
 function bindGlobalDrugSearch() {
@@ -2726,6 +2774,7 @@ async function initPrototype() {
     await loadArchivedDrugsFromBackend();
     const startupUpdateStatus = await refreshUpdateStatus({ silent: true });
     await maybeAutoApplyStartupUpdate(startupUpdateStatus);
+    waitForDailyAvailability().then(() => refreshAvailabilityTable());
 
     const refreshAvailabilityBtn = document.getElementById("refreshAvailabilityBtn");
     if (refreshAvailabilityBtn) {

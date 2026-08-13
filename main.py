@@ -17,6 +17,7 @@ _bootstrap_frozen_overrides()
 
 import eel
 
+from backend.availability_cache import DailyAvailabilityStore
 from backend.custom_drug_add import add_custom_drug_from_tabletka
 from backend.db import DrugRepository
 from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
@@ -27,7 +28,7 @@ from backend.print_preview import build_preview_context
 from backend.runtime_control import build_restart_command, hard_exit, spawn_restart
 from backend.settings import SettingsStore
 from backend.seed_loader import load_archived_drugs
-from backend.tabletka import availability_to_dict, check_availability_minsk, search_tabletka
+from backend.tabletka import search_tabletka
 from backend.treatment_parse import parse_treatment_text
 from backend.updater import apply_update, cleanup_update_artifacts, get_update_status, open_repo_in_browser
 from backend.validate import normalize_prescription_payload, validate_prescription_payload
@@ -51,6 +52,7 @@ def writable_path(*parts: str) -> Path:
 
 REPOSITORY = DrugRepository(writable_path("data") / "app.db")
 SETTINGS = SettingsStore(writable_path("data") / "settings.json")
+AVAILABILITY = DailyAvailabilityStore(writable_path("data"))
 
 
 def setup_logging() -> None:
@@ -272,30 +274,53 @@ def search_tabletka_drugs(query):
 
 
 @eel.expose
+def get_daily_availability():
+    return AVAILABILITY.snapshot()
+
+
+@eel.expose
+def ensure_daily_availability(force=False):
+    """Один опрос tabletka.by в сутки — при первом запуске дня."""
+    return AVAILABILITY.ensure_today(REPOSITORY.list_drugs(), force=bool(force))
+
+
+@eel.expose
 def check_drug_availability(query, aliases=None):
     alias_list = aliases if isinstance(aliases, list) else []
-    return availability_to_dict(check_availability_minsk(query or "", aliases=alias_list))
+    cached = AVAILABILITY.lookup(query, alias_list)
+    if cached:
+        return {
+            **cached,
+            "query": query,
+            "cached": True,
+        }
+    return {
+        "query": query or "",
+        "status": "unknown",
+        "label": "—",
+        "pharmacies_minsk": 0,
+        "offers": [],
+        "cached": True,
+        "message": "Наличие проверяется раз в день при первом запуске.",
+    }
 
 
 @eel.expose
 def refresh_catalog_availability(limit=20):
-    """Проверка наличия в Минске для первых препаратов каталога."""
-    drugs = REPOSITORY.list_drugs()[: max(1, min(int(limit or 20), 40))]
-    rows = []
-    for drug in drugs:
-        aliases = list(drug.get("trade_names") or [])[:4]
-        result = check_availability_minsk(drug["russian_name"], aliases=aliases)
-        rows.append(
-            {
-                "mnn": drug["mnn"],
-                "russian_name": drug["russian_name"],
-                "status": result.status,
-                "label": result.label,
-                "pharmacies_minsk": result.pharmacies_minsk,
-                "message": result.message,
-            }
-        )
-    return {"ok": True, "city": "Минск", "rows": rows}
+    """Возвращает дневной кэш; limit оставлен для совместимости."""
+    _ = limit
+    snapshot = AVAILABILITY.snapshot()
+    if not snapshot.get("fresh") and not snapshot.get("checking"):
+        snapshot = AVAILABILITY.ensure_today(REPOSITORY.list_drugs())
+    return {
+        "ok": True,
+        "city": "Минск",
+        "date": snapshot.get("date"),
+        "fresh": snapshot.get("fresh"),
+        "checking": snapshot.get("checking"),
+        "rows": snapshot.get("rows") or [],
+        "message": snapshot.get("message"),
+    }
 
 
 @eel.expose
@@ -339,6 +364,7 @@ def main() -> None:
     cleanup_update_artifacts()
     REPOSITORY.initialize()
     SETTINGS.load()
+    AVAILABILITY.ensure_today(REPOSITORY.list_drugs())
     web_dir = resource_path("web")
     eel.init(str(web_dir))
     eel.start(
