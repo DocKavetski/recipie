@@ -53,7 +53,7 @@ let searchActiveIndex = 0;
 let latestUpdateStatus = null;
 let printBlankCssText = "";
 let autoUpdateStarted = false;
-let dailyAvailability = { date: "", fresh: false, checking: false, rows: [], byKey: {} };
+let dailyAvailability = { date: "", fresh: false, checking: false, useful: false, rows: [], byKey: {}, progress: null };
 
 const DUPLEX_BACK_SLOT = [1, 0, 3, 2];
 const PRINT_CUT_MARKS_HTML = `
@@ -938,12 +938,17 @@ function indexDailyAvailability(payload) {
             byKey[normalized] = row;
         }
     }
+    const useful = typeof payload?.useful === "boolean"
+        ? payload.useful
+        : rows.some((row) => ["good", "low", "none"].includes(String(row?.status || "")));
     dailyAvailability = {
         date: payload?.date || "",
         fresh: Boolean(payload?.fresh),
         checking: Boolean(payload?.checking),
+        useful,
         rows,
         byKey,
+        progress: payload?.progress || null,
         message: payload?.message || "",
     };
     return dailyAvailability;
@@ -1167,13 +1172,24 @@ function updateDirectoryAvailabilityMeta() {
         return;
     }
     if (dailyAvailability.checking) {
-        meta.textContent = dailyAvailability.message || "Идёт проверка наличия на tabletka.by…";
+        const progress = dailyAvailability.progress;
+        if (progress?.total) {
+            meta.textContent = dailyAvailability.message
+                || `Идёт проверка наличия: ${progress.done || 0}/${progress.total}…`;
+        } else {
+            meta.textContent = dailyAvailability.message || "Идёт проверка наличия на tabletka.by…";
+        }
         return;
     }
-    if (dailyAvailability.rows?.length) {
+    if (dailyAvailability.useful && dailyAvailability.rows?.length) {
         const date = dailyAvailability.date ? ` на ${dailyAvailability.date}` : "";
         meta.textContent = dailyAvailability.message
             || `Наличие${date}: ${dailyAvailability.rows.length} препаратов.`;
+        return;
+    }
+    if (dailyAvailability.rows?.length) {
+        meta.textContent = dailyAvailability.message
+            || "Проверка завершилась без данных — нажмите «Проверить наличие» ещё раз.";
         return;
     }
     meta.textContent = "Наличие ещё не проверялось — нажмите «Проверить наличие».";
@@ -1650,17 +1666,20 @@ async function loadDailyAvailability({ start = false, force = false } = {}) {
     return dailyAvailability;
 }
 
-async function waitForDailyAvailability(timeoutMs = 90000) {
+async function waitForDailyAvailability(timeoutMs = 300000) {
     const started = Date.now();
     await loadDailyAvailability({ start: true });
     while (dailyAvailability.checking && Date.now() - started < timeoutMs) {
         await new Promise((resolve) => window.setTimeout(resolve, 1500));
         await loadDailyAvailability();
+        updateDirectoryAvailabilityMeta();
     }
-    if (dailyAvailability.fresh) {
+    if (dailyAvailability.useful) {
         setStatus(dailyAvailability.message || `Наличие на сегодня: ${dailyAvailability.rows.length} препаратов.`);
     } else if (dailyAvailability.checking) {
         setStatus("Проверка наличия ещё идёт в фоне — статусы появятся сами.");
+    } else if (dailyAvailability.rows?.length) {
+        setStatus(dailyAvailability.message || "Проверка завершилась без данных. Нажмите «Проверить наличие» ещё раз.");
     }
     return dailyAvailability;
 }
@@ -1684,12 +1703,16 @@ async function forceCheckDailyAvailability() {
         }
         await loadDailyAvailability({ start: true, force: true });
         const started = Date.now();
-        while (dailyAvailability.checking && Date.now() - started < 180000) {
+        while (dailyAvailability.checking && Date.now() - started < 360000) {
             await new Promise((resolve) => window.setTimeout(resolve, 1500));
             await loadDailyAvailability();
+            updateDirectoryAvailabilityMeta();
+            if (button && dailyAvailability.progress?.total) {
+                button.innerHTML = `<i class="fa-solid fa-rotate fa-spin me-1"></i>${dailyAvailability.progress.done || 0}/${dailyAvailability.progress.total}`;
+            }
         }
         renderDirectoryTable();
-        if (dailyAvailability.rows?.length) {
+        if (dailyAvailability.useful) {
             setStatus(dailyAvailability.message || `Наличие обновлено: ${dailyAvailability.rows.length} препаратов.`);
         } else if (dailyAvailability.checking) {
             setStatus("Проверка ещё идёт в фоне — статусы появятся в справочнике.");

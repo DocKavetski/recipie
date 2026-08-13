@@ -121,6 +121,64 @@ def test_force_recovers_from_dead_worker(tmp_path: Path):
     assert store.snapshot()["checking"] is False
 
 
+def test_failed_refresh_keeps_previous_useful_cache(tmp_path: Path):
+    calls = []
+
+    def flaky_checker(query, aliases=None):
+        calls.append(query)
+        if len(calls) == 1:
+            return _fake_checker(query, aliases)
+        return MinskAvailability(
+            query=query,
+            status="unknown",
+            label="Нет данных",
+            pharmacies_minsk=0,
+            offers=[],
+            message="down",
+        )
+
+    store = DailyAvailabilityStore(tmp_path, checker=flaky_checker)
+    drugs = [{"mnn": "Keep", "russian_name": "Сохранить", "trade_names": ["Альяс"]}]
+    store.ensure_today(drugs)
+    if store._thread:
+        store._thread.join(timeout=2)
+    assert store.lookup("сохранить")["status"] == "good"
+
+    store.ensure_today(drugs, force=True)
+    if store._thread:
+        store._thread.join(timeout=2)
+    assert len(calls) == 2
+    assert store.lookup("альяс")["status"] == "good"
+    assert store.snapshot()["useful"] is True
+    assert "предыдущие" in store.snapshot()["message"] or "не вернул" in store.snapshot()["message"]
+
+
+def test_progress_published_during_build(tmp_path: Path):
+    progress_events = []
+
+    def slowish_checker(query, aliases=None):
+        return _fake_checker(query, aliases)
+
+    drugs = [
+        {"mnn": "A", "russian_name": "Ааа", "trade_names": []},
+        {"mnn": "B", "russian_name": "Ббб", "trade_names": []},
+    ]
+    cache = build_daily_cache(
+        drugs,
+        checker=slowish_checker,
+        on_progress=lambda partial: progress_events.append(partial["progress"]),
+    )
+    assert has_useful_rows(cache)
+    assert progress_events == [{"done": 1, "total": 2}, {"done": 2, "total": 2}]
+
+
+def test_pharmacy_total_from_split_texts():
+    from backend.tabletka import _pharmacy_total_from_texts
+
+    assert _pharmacy_total_from_texts(["Кетилепт", "табл 25мг", "в 3331", "аптеке"]) == 3331
+    assert _pharmacy_total_from_texts(["в 12 аптеках"]) == 12
+
+
 def test_shared_store_is_singleton(tmp_path: Path):
     import backend.availability_cache as availability_cache
 

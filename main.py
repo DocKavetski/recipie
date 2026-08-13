@@ -324,8 +324,10 @@ def refresh_catalog_availability(limit=20, force=False):
         "date": snapshot.get("date"),
         "fresh": snapshot.get("fresh"),
         "checking": snapshot.get("checking"),
+        "useful": snapshot.get("useful"),
         "rows": snapshot.get("rows") or [],
         "by_key": snapshot.get("by_key") or {},
+        "progress": snapshot.get("progress"),
         "message": snapshot.get("message"),
     }
 

@@ -92,7 +92,10 @@ def register_availability_exposes(repository: Any) -> None:
             snapshot = store.ensure_today(repository.list_drugs(), force=True)
         else:
             snapshot = store.snapshot()
-            if not snapshot.get("checking") and not snapshot.get("fresh"):
+            if not snapshot.get("checking") and (
+                not snapshot.get("fresh")
+                or not snapshot.get("useful")
+            ):
                 snapshot = store.ensure_today(repository.list_drugs())
         return {
             "ok": True,
@@ -100,8 +103,10 @@ def register_availability_exposes(repository: Any) -> None:
             "date": snapshot.get("date"),
             "fresh": snapshot.get("fresh"),
             "checking": snapshot.get("checking"),
+            "useful": snapshot.get("useful"),
             "rows": snapshot.get("rows") or [],
             "by_key": snapshot.get("by_key") or {},
+            "progress": snapshot.get("progress"),
             "message": snapshot.get("message"),
         }
 

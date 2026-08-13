@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
-from backend.tabletka import availability_to_dict, check_availability_minsk
+from backend.tabletka import _session, availability_to_dict, check_availability_minsk
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,6 +74,11 @@ def has_useful_rows(payload: dict[str, Any] | None) -> bool:
     return any(str(row.get("status") or "") in {"good", "low", "none"} for row in rows)
 
 
+def useful_count(payload: dict[str, Any] | None) -> int:
+    rows = (payload or {}).get("rows") or []
+    return sum(1 for row in rows if str(row.get("status") or "") in {"good", "low", "none"})
+
+
 def _row_keys(drug: dict[str, Any]) -> list[str]:
     keys = [
         _normalize(drug.get("mnn")),
@@ -106,31 +111,70 @@ def build_daily_cache(
     drugs: list[dict[str, Any]],
     *,
     checker: Callable[..., Any] = check_availability_minsk,
+    on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     by_key: dict[str, dict[str, Any]] = {}
-    for drug in drugs:
-        aliases = list(drug.get("trade_names") or [])[:4]
-        query = str(drug.get("russian_name") or drug.get("mnn") or "").strip()
-        if not query:
-            continue
-        result = availability_to_dict(checker(query, aliases=aliases))
-        row = {
-            "mnn": drug.get("mnn"),
-            "russian_name": drug.get("russian_name"),
-            "status": result.get("status") or "unknown",
-            "label": result.get("label") or "Нет данных",
-            "pharmacies_minsk": result.get("pharmacies_minsk") or 0,
-            "message": result.get("message") or "",
-        }
-        rows.append(row)
-        for key in _row_keys(drug):
-            by_key[key] = row
+    total = len([d for d in drugs if str(d.get("russian_name") or d.get("mnn") or "").strip()])
+    done = 0
+
+    # Один HTTP-сеанс на весь каталог — быстрее и стабильнее на Windows.
+    session = None
+    wrapped = checker
+    if checker is check_availability_minsk:
+        session = _session()
+
+        def wrapped(query, aliases=None):  # noqa: ANN001
+            return check_availability_minsk(query, aliases=aliases, session=session)
+
+    try:
+        for drug in drugs:
+            aliases = list(drug.get("trade_names") or [])[:4]
+            query = str(drug.get("russian_name") or drug.get("mnn") or "").strip()
+            if not query:
+                continue
+            result = availability_to_dict(wrapped(query, aliases=aliases))
+            row = {
+                "mnn": drug.get("mnn"),
+                "russian_name": drug.get("russian_name"),
+                "status": result.get("status") or "unknown",
+                "label": result.get("label") or "Нет данных",
+                "pharmacies_minsk": result.get("pharmacies_minsk") or 0,
+                "message": result.get("message") or "",
+            }
+            rows.append(row)
+            for key in _row_keys(drug):
+                by_key[key] = row
+            done += 1
+            if on_progress:
+                on_progress(
+                    {
+                        "date": today_key(),
+                        "rows": list(rows),
+                        "by_key": dict(by_key),
+                        "message": f"Проверяю наличие: {done}/{total}…",
+                        "progress": {"done": done, "total": total},
+                    }
+                )
+    finally:
+        if session is not None:
+            session.close()
+
+    useful = useful_count({"rows": rows})
+    if useful:
+        message = f"Наличие на {today_key()}: {useful} из {len(rows)} препаратов."
+    elif rows:
+        message = (
+            f"tabletka.by не вернул наличие ({len(rows)} запросов без данных). "
+            "Проверьте интернет и нажмите «Проверить наличие» ещё раз."
+        )
+    else:
+        message = "Каталог пуст — нечего проверять."
     return {
         "date": today_key(),
         "rows": rows,
         "by_key": by_key,
-        "message": f"Наличие на {today_key()}: {len(rows)} препаратов.",
+        "message": message,
     }
 
 
@@ -144,17 +188,30 @@ class DailyAvailabilityStore:
         self._thread: threading.Thread | None = None
         self._checking = False
         self._pending_force: list[dict[str, Any]] | None = None
+        self._progress: dict[str, int] | None = None
         self._cache = load_cache(self.path)
+
+    def _recover_dead_worker(self) -> None:
+        if self._checking and not self._worker_alive():
+            LOGGER.warning("Availability worker dead with checking=True; resetting")
+            self._checking = False
+            self._pending_force = None
+            self._progress = None
+            if not self._cache.get("message"):
+                self._cache["message"] = "Проверка прервалась. Нажмите «Проверить наличие»."
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
+            self._recover_dead_worker()
             return {
                 "ok": True,
                 "date": self._cache.get("date") or "",
                 "fresh": is_fresh(self._cache),
                 "checking": self._checking,
+                "useful": has_useful_rows(self._cache),
                 "rows": list(self._cache.get("rows") or []),
                 "by_key": dict(self._cache.get("by_key") or {}),
+                "progress": dict(self._progress) if self._progress else None,
                 "message": self._cache.get("message")
                 or (
                     "Проверяю наличие на сегодня…"
@@ -172,11 +229,7 @@ class DailyAvailabilityStore:
 
     def ensure_today(self, drugs: list[dict[str, Any]], *, force: bool = False) -> dict[str, Any]:
         with self._lock:
-            # Если прошлый поток умер, а флаг checking завис — сбрасываем.
-            if self._checking and not self._worker_alive():
-                LOGGER.warning("Availability worker dead with checking=True; resetting")
-                self._checking = False
-                self._pending_force = None
+            self._recover_dead_worker()
 
             if not force and is_fresh(self._cache) and has_useful_rows(self._cache):
                 return self.snapshot()
@@ -187,8 +240,11 @@ class DailyAvailabilityStore:
                 return self.snapshot()
             self._checking = True
             self._pending_force = None
+            self._progress = {"done": 0, "total": len(drugs)}
             if force:
                 self._cache["message"] = "Принудительная проверка tabletka.by…"
+            else:
+                self._cache["message"] = "Проверяю наличие на сегодня…"
             self._thread = threading.Thread(
                 target=self._refresh,
                 args=(list(drugs), bool(force)),
@@ -198,24 +254,77 @@ class DailyAvailabilityStore:
             self._thread.start()
         return self.snapshot()
 
+    def _publish_progress(self, partial: dict[str, Any]) -> None:
+        with self._lock:
+            # Показываем промежуточные строки, но не затираем полезный кэш файлом,
+            # пока опрос не закончится успешно.
+            self._cache = {
+                "date": partial.get("date") or self._cache.get("date") or "",
+                "rows": list(partial.get("rows") or []),
+                "by_key": dict(partial.get("by_key") or {}),
+                "message": str(partial.get("message") or self._cache.get("message") or ""),
+            }
+            progress = partial.get("progress")
+            self._progress = dict(progress) if isinstance(progress, dict) else self._progress
+
     def _refresh(self, drugs: list[dict[str, Any]], force: bool) -> None:
+        previous: dict[str, Any] = {}
         try:
             with self._lock:
                 if not force and is_fresh(self._cache) and has_useful_rows(self._cache):
                     return
-            built = build_daily_cache(drugs, checker=self.checker)
-            save_cache(self.path, built)
-            with self._lock:
-                self._cache = built
-            LOGGER.info("Daily availability cache updated: %s rows", len(built["rows"]))
+                previous = {
+                    "date": self._cache.get("date") or "",
+                    "rows": list(self._cache.get("rows") or []),
+                    "by_key": dict(self._cache.get("by_key") or {}),
+                    "message": self._cache.get("message") or "",
+                }
+            built = build_daily_cache(
+                drugs,
+                checker=self.checker,
+                on_progress=self._publish_progress,
+            )
+            if has_useful_rows(built):
+                save_cache(self.path, built)
+                with self._lock:
+                    self._cache = built
+                LOGGER.info(
+                    "Daily availability cache updated: %s useful / %s rows",
+                    useful_count(built),
+                    len(built["rows"]),
+                )
+            else:
+                # Не затираем вчерашний/сегодняшний полезный кэш пустыми «Нет данных».
+                keep_previous = has_useful_rows(previous)
+                with self._lock:
+                    if keep_previous:
+                        self._cache = {
+                            **previous,
+                            "message": (
+                                built.get("message")
+                                or "tabletka.by не ответил — оставлены предыдущие данные."
+                            ),
+                        }
+                        LOGGER.warning("Availability refresh returned no useful rows; kept previous cache")
+                    else:
+                        save_cache(self.path, built)
+                        self._cache = built
+                        LOGGER.warning("Availability refresh returned no useful rows")
         except Exception:  # noqa: BLE001
             LOGGER.exception("Daily availability refresh failed")
             with self._lock:
-                self._cache["message"] = "Не удалось обновить наличие на сегодня."
+                if has_useful_rows(previous):
+                    self._cache = {
+                        **previous,
+                        "message": "Не удалось обновить наличие — оставлены предыдущие данные.",
+                    }
+                else:
+                    self._cache["message"] = "Не удалось обновить наличие на сегодня."
         finally:
             pending: list[dict[str, Any]] | None = None
             with self._lock:
                 self._checking = False
+                self._progress = None
                 pending = self._pending_force
                 self._pending_force = None
             if pending is not None:
