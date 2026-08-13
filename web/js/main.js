@@ -367,8 +367,8 @@ function openPrintPreview(state, pdfPath = "", preview = null) {
                 <div class="rx-void" title="Поле закрыто символом Ƶ — дописывать нельзя" aria-label="Пустое поле закрыто">
                     <svg class="rx-void-mark" viewBox="0 0 120 56" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
                         <g fill="none" stroke="#444" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10 8 H110 L10 48 H110" stroke-width="2.2"></path>
-                            <path d="M16 28 H104" stroke-width="1.8"></path>
+                            <path d="M10 8 H110 L10 48 H110" stroke-width="1.1"></path>
+                            <path d="M16 28 H104" stroke-width="0.9"></path>
                         </g>
                     </svg>
                 </div>
