@@ -24,6 +24,7 @@ def register_repository_exposes(repository: Any) -> None:
     except Exception:  # noqa: BLE001
         return
 
+    from backend.custom_drug_add import add_custom_drug_from_tabletka
     from backend.seed_loader import load_archived_drugs
     from backend.treatment_parse import parse_treatment_text
 
@@ -35,5 +36,20 @@ def register_repository_exposes(repository: Any) -> None:
     def get_archived_drugs():
         return load_archived_drugs()
 
+    @eel.expose
+    def upsert_custom_drug(payload):
+        return repository.upsert_custom_drug(payload or {})
+
+    @eel.expose
+    def add_drug_from_tabletka(query):
+        return add_custom_drug_from_tabletka(repository, query or "")
+
+    @eel.expose
+    def delete_custom_drug(mnn):
+        return repository.delete_custom_drug(mnn or "")
+
     _REGISTERED = True
-    LOGGER.info("Registered runtime Eel exposes: parse_treatment, get_archived_drugs")
+    LOGGER.info(
+        "Registered runtime Eel exposes: parse_treatment, get_archived_drugs, "
+        "upsert_custom_drug, add_drug_from_tabletka, delete_custom_drug"
+    )

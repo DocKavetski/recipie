@@ -45,7 +45,9 @@ def build_mnn_key(query: str, russian_name: str = "") -> str:
     return _transliterate_to_mnn(russian_name or q)
 
 
-def payload_from_tabletka_query(query: str, *, enricher=enrich_by_russian_name) -> dict[str, Any]:
+def payload_from_tabletka_query(query: str, *, enricher=None) -> dict[str, Any]:
+    if enricher is None:
+        enricher = enrich_by_russian_name
     name = str(query or "").strip()
     if len(name) < 3:
         raise ValueError("Введите МНН (минимум 3 символа).")
@@ -96,7 +98,7 @@ def payload_from_tabletka_query(query: str, *, enricher=enrich_by_russian_name) 
     }
 
 
-def add_custom_drug_from_tabletka(repository: Any, query: str, *, enricher=enrich_by_russian_name) -> dict[str, Any]:
+def add_custom_drug_from_tabletka(repository: Any, query: str, *, enricher=None) -> dict[str, Any]:
     payload = payload_from_tabletka_query(query, enricher=enricher)
     meta = payload.pop("tabletka_meta", {})
     russian_key = str(payload["russian_name"]).strip().lower().replace("ё", "е")

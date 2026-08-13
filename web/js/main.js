@@ -1746,9 +1746,28 @@ function bindDoctorControls() {
     }
 }
 
+async function waitForBackend(timeoutMs = 8000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+        if (window.eel && typeof window.eel.ping === "function") {
+            try {
+                const pong = await window.eel.ping()();
+                if (pong && pong.ok) {
+                    return true;
+                }
+            } catch (_error) {
+                // bridge ещё поднимается
+            }
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 200));
+    }
+    return Boolean(window.eel && typeof window.eel.get_catalog_drugs === "function");
+}
+
 async function loadCatalogFromBackend() {
-    if (!window.eel || typeof window.eel.get_catalog_drugs !== "function") {
-        setStatus("Backend пока недоступен, используется встроенный демо-каталог.");
+    const ready = await waitForBackend();
+    if (!ready || typeof window.eel.get_catalog_drugs !== "function") {
+        setStatus("Backend пока недоступен, используется встроенный демо-каталог. Запускайте Recepty.exe, не index.html.");
         return;
     }
 
@@ -2388,8 +2407,12 @@ function bindManualDrugControls() {
                 setStatus("Введите МНН (минимум 3 символа).");
                 return;
             }
-            if (!window.eel || typeof window.eel.add_drug_from_tabletka !== "function") {
-                setStatus("Backend недоступен.");
+            const ready = await waitForBackend(3000);
+            if (!ready || typeof window.eel.add_drug_from_tabletka !== "function") {
+                setStatus(
+                    "Backend недоступен для добавления по МНН. Обновите приложение (Настройки → Обновить) "
+                    + "или скачайте свежий zip с GitHub Releases и перезапустите Recepty.exe."
+                );
                 return;
             }
             saveManualDrugBtn.disabled = true;
