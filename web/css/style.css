@@ -251,6 +251,42 @@ body {
     min-width: 0;
 }
 
+.dispense-stepper {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+}
+
+.dispense-stepper .drug-dispense-input {
+    width: 4.2rem;
+    text-align: center;
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+}
+
+.dispense-pack-btn {
+    flex: 0 0 auto;
+    min-width: 1.7rem;
+    height: 1.55rem;
+    padding: 0 3px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #f7fafc;
+    color: var(--ink);
+    font-size: 0.66rem;
+    line-height: 1;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.dispense-pack-btn:hover,
+.dispense-pack-btn:focus-visible {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .drugs-empty {
     display: none;
     margin-top: 8px;

@@ -92,11 +92,50 @@ function syncDispenseConstraints(row, options = {}) {
     }
 }
 
+function adjustDispenseByPack(row, direction) {
+    const packagingInput = row.querySelector(".drug-packaging-input");
+    const dispenseInput = row.querySelector(".drug-dispense-input");
+    if (!packagingInput || !dispenseInput) {
+        return;
+    }
+    const packaging = packagingInput.value;
+    const packQty = extractDefaultDispenseQty(packaging);
+    const step = dispenseStepByPackaging(packaging);
+    const delta = (Number.isFinite(packQty) && packQty > 0 ? packQty : (step > 1 ? step : 1));
+    const current = Number.parseInt(String(dispenseInput.value || "").trim(), 10);
+    const base = Number.isFinite(current) && current > 0 ? current : 0;
+    const minimum = delta;
+    if (direction > 0) {
+        dispenseInput.value = String(ceilToDispenseStep(base + delta, packaging));
+    } else {
+        const raw = base - delta;
+        const floored = step > 1
+            ? Math.max(step, Math.floor(raw / step) * step)
+            : Math.max(1, raw);
+        dispenseInput.value = String(Math.max(minimum, floored));
+    }
+    dispenseInput.dataset.prevDispenseValue = String(dispenseInput.value);
+    syncDispenseConstraints(row, { normalizeValue: false });
+    if (typeof scheduleAutosave === "function") {
+        scheduleAutosave();
+    }
+}
+
 function bindDispenseConstraints(row) {
     const packagingInput = row.querySelector(".drug-packaging-input");
     const dispenseInput = row.querySelector(".drug-dispense-input");
     if (!packagingInput || !dispenseInput || dispenseInput.dataset.dispenseBound) {
         return;
+    }
+    const minusBtn = row.querySelector(".dispense-minus-btn");
+    const plusBtn = row.querySelector(".dispense-plus-btn");
+    if (minusBtn && !minusBtn.dataset.dispenseBound) {
+        minusBtn.addEventListener("click", () => adjustDispenseByPack(row, -1));
+        minusBtn.dataset.dispenseBound = "true";
+    }
+    if (plusBtn && !plusBtn.dataset.dispenseBound) {
+        plusBtn.addEventListener("click", () => adjustDispenseByPack(row, 1));
+        plusBtn.dataset.dispenseBound = "true";
     }
     packagingInput.addEventListener("change", () => {
         const previousStep = Number.parseInt(dispenseInput.dataset.dispenseStep || "1", 10) || 1;
