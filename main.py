@@ -240,6 +240,16 @@ def delete_template(name):
 
 
 @eel.expose
+def upsert_custom_drug(payload):
+    return REPOSITORY.upsert_custom_drug(payload or {})
+
+
+@eel.expose
+def delete_custom_drug(mnn):
+    return REPOSITORY.delete_custom_drug(mnn or "")
+
+
+@eel.expose
 def search_tabletka_drugs(query):
     offers = search_tabletka(query or "")
     return [

@@ -62,21 +62,26 @@
 
                     <div class="drug-search-bar mb-3">
                         <label class="form-label mb-1" for="globalDrugSearch">Поиск и добавление</label>
-                        <div class="drug-search-wrap">
-                            <input
-                                class="form-control form-control-sm drug-search-input"
-                                id="globalDrugSearch"
-                                type="text"
-                                placeholder="Начните вводить МНН, русское или торговое название"
-                                autocomplete="off"
-                            >
-                            <div class="drug-search-dropdown" id="drugSearchDropdown" hidden></div>
+                        <div class="d-flex flex-wrap gap-2 align-items-start">
+                            <div class="drug-search-wrap flex-grow-1">
+                                <input
+                                    class="form-control form-control-sm drug-search-input"
+                                    id="globalDrugSearch"
+                                    type="text"
+                                    placeholder="Начните вводить МНН, русское или торговое название"
+                                    autocomplete="off"
+                                >
+                                <div class="drug-search-dropdown" id="drugSearchDropdown" hidden></div>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary" id="addManualDrugBtn" type="button" title="Пустая строка для ручного заполнения">
+                                Добавить вручную
+                            </button>
                         </div>
                         <div class="text-muted small mt-1">
                             <span class="hint-kbd">Enter</span> добавить ·
                             <span class="hint-kbd">↑</span><span class="hint-kbd">↓</span> выбрать ·
                             <span class="hint-kbd">Esc</span> закрыть ·
-                            после добавления проверяется наличие в Минске (tabletka.by)
+                            или «Добавить вручную» — заполнить поля самому
                         </div>
                     </div>
 
@@ -147,7 +152,7 @@
                     <div class="panel-head">
                         <div>
                             <div class="panel-title mb-0">Редактор шаблонов</div>
-                            <div class="stub-note">Сложные схемы (например титрация венлафаксина в 3 строки) сохраняйте как шаблон и загружайте в один клик.</div>
+                            <div class="stub-note">Составляйте и редактируйте набор препаратов. В рецепт подставляются только строки препаратов — данные пациента не меняются.</div>
                         </div>
                     </div>
                     <div class="row g-2 align-items-end mb-3">
@@ -167,15 +172,57 @@
                             >
                         </div>
                         <div class="col-12 col-lg-4">
-                            <div class="d-flex flex-wrap gap-2">
-                                <button class="btn btn-sm btn-primary" id="templateManagerSaveBtn" type="button">Сохранить текущую форму</button>
-                                <button class="btn btn-sm btn-outline-secondary" id="templateManagerLoadBtn" type="button">Загрузить шаблон</button>
-                                <button class="btn btn-sm btn-outline-danger" id="templateManagerDeleteBtn" type="button">Удалить</button>
-                            </div>
+                            <div class="small text-muted" id="templateManagerMeta">Новый шаблон</div>
                         </div>
                     </div>
-                    <div class="small text-muted mb-2">Состав выбранного шаблона:</div>
-                    <div class="template-preview-box" id="templateManagerPreview">Выберите шаблон для просмотра состава.</div>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <button class="btn btn-sm btn-outline-secondary" id="templateManagerNewBtn" type="button">Новый</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="templateManagerImportBtn" type="button">Из рецепта</button>
+                        <button class="btn btn-sm btn-primary" id="templateManagerSaveBtn" type="button">Сохранить</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="templateManagerDuplicateBtn" type="button">Дублировать</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="templateManagerLoadBtn" type="button">В рецепт</button>
+                        <button class="btn btn-sm btn-outline-danger" id="templateManagerDeleteBtn" type="button">Удалить</button>
+                    </div>
+
+                    <div class="drug-search-bar mb-3">
+                        <label class="form-label mb-1" for="templateDrugSearch">Добавить препарат в шаблон</label>
+                        <div class="d-flex flex-wrap gap-2 align-items-start">
+                            <div class="drug-search-wrap flex-grow-1">
+                                <input
+                                    class="form-control form-control-sm drug-search-input"
+                                    id="templateDrugSearch"
+                                    type="text"
+                                    placeholder="МНН, русское или торговое название"
+                                    autocomplete="off"
+                                >
+                                <div class="drug-search-dropdown" id="templateDrugSearchDropdown" hidden></div>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary" id="templateAddManualBtn" type="button">Вручную</button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle recipe-table template-recipe-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="min-width: 110px;">Режим</th>
+                                    <th style="min-width: 150px;">Торговое название</th>
+                                    <th style="min-width: 120px;">МНН</th>
+                                    <th style="min-width: 150px;">Русское название</th>
+                                    <th style="min-width: 140px;">Лат. название</th>
+                                    <th style="min-width: 90px;">Форма</th>
+                                    <th style="min-width: 90px;">Дозировка</th>
+                                    <th style="min-width: 90px;">Фасовка</th>
+                                    <th style="min-width: 110px;">D.t.d. №</th>
+                                    <th style="min-width: 220px;">Схема</th>
+                                    <th class="template-col-availability" style="min-width: 90px;">Наличие</th>
+                                    <th style="min-width: 60px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="templateDrugRows"></tbody>
+                        </table>
+                    </div>
+                    <div class="drugs-empty is-visible" id="templateDrugsEmptyState">Шаблон пуст — добавьте препараты через поиск, вручную или импортируйте из рецепта</div>
                 </div>
             </section>
 
@@ -187,6 +234,54 @@
                             <div class="stub-note">Активный каталог для выписки. Ниже — архив препаратов, которых нет в продаже.</div>
                         </div>
                     </div>
+
+                    <div class="manual-drug-form mb-3">
+                        <div class="panel-title mb-1">Добавить препарат в каталог</div>
+                        <div class="stub-note mb-2">Ручные препараты сохраняются локально и не удаляются при обновлении каталога.</div>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-6 col-md-3">
+                                <label class="form-label mb-1" for="manualDrugRussian">Русское название</label>
+                                <input class="form-control form-control-sm" id="manualDrugRussian" type="text" placeholder="Сертралин">
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label mb-1" for="manualDrugMnn">МНН (латиница)</label>
+                                <input class="form-control form-control-sm" id="manualDrugMnn" type="text" placeholder="Sertraline">
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label mb-1" for="manualDrugLatin">Лат. название</label>
+                                <input class="form-control form-control-sm" id="manualDrugLatin" type="text" placeholder="Sertralinum">
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label mb-1" for="manualDrugForm">Форма</label>
+                                <select class="form-select form-select-sm" id="manualDrugForm">
+                                    <option value="Tab.">Tab.</option>
+                                    <option value="Caps.">Caps.</option>
+                                    <option value="Sol.">Sol.</option>
+                                    <option value="Gtt.">Gtt.</option>
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-1">
+                                <label class="form-label mb-1" for="manualDrugDosage">Доза</label>
+                                <input class="form-control form-control-sm" id="manualDrugDosage" type="text" placeholder="50 мг">
+                            </div>
+                            <div class="col-6 col-md-1">
+                                <label class="form-label mb-1" for="manualDrugPackaging">Фасовка</label>
+                                <input class="form-control form-control-sm" id="manualDrugPackaging" type="text" placeholder="N30" value="N30">
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label mb-1" for="manualDrugTrade">Торговые (через ;)</label>
+                                <input class="form-control form-control-sm" id="manualDrugTrade" type="text" placeholder="Стимулотон">
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <label class="form-label mb-1" for="manualDrugCategory">Категория</label>
+                                <input class="form-control form-control-sm" id="manualDrugCategory" type="text" placeholder="Прочее" value="Прочее">
+                            </div>
+                            <div class="col-12 col-md-2">
+                                <button class="btn btn-sm btn-primary w-100" id="saveManualDrugBtn" type="button">Сохранить в каталог</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="table table-sm table-striped align-middle mb-0">
                             <thead>
@@ -199,6 +294,7 @@
                                     <th>Дозировка</th>
                                     <th>Фасовка</th>
                                     <th>Торговые названия</th>
+                                    <th style="min-width: 70px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="directoryTableBody"></tbody>
@@ -417,6 +513,7 @@
     <script src="js/dose-utils.js"></script>
     <script src="js/dispense-qty.js"></script>
     <script src="js/trade-packaging.js"></script>
+    <script src="js/template-editor.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

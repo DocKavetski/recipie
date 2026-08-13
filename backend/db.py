@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,8 @@ class DrugRepository:
                     trade_names_json TEXT NOT NULL,
                     search_aliases_json TEXT NOT NULL,
                     scheme_options_json TEXT NOT NULL,
-                    trade_details_json TEXT NOT NULL DEFAULT '{}'
+                    trade_details_json TEXT NOT NULL DEFAULT '{}',
+                    is_custom INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
@@ -93,6 +95,10 @@ class DrugRepository:
                 connection.execute(
                     "ALTER TABLE drugs ADD COLUMN form_dosage_map_json TEXT NOT NULL DEFAULT '{}'"
                 )
+            if "is_custom" not in columns:
+                connection.execute(
+                    "ALTER TABLE drugs ADD COLUMN is_custom INTEGER NOT NULL DEFAULT 0"
+                )
             connection.commit()
 
         self.sync_seed_catalog(replace=True)
@@ -111,15 +117,16 @@ class DrugRepository:
         with self._connect() as connection:
             LOGGER.info("Syncing drugs catalog with %s entries (replace=%s)", len(drugs), replace)
             if replace:
-                connection.execute("DELETE FROM drugs")
+                # Ручные препараты (is_custom=1) сохраняем при обновлении seed.
+                connection.execute("DELETE FROM drugs WHERE COALESCE(is_custom, 0) = 0")
 
             connection.executemany(
                 """
                 INSERT INTO drugs (
                     category, mnn, russian_name, latin_name, drug_form, dosage, packaging,
                     trade_names_json, search_aliases_json, scheme_options_json, trade_details_json,
-                    form_options_json, dosage_options_json, form_dosage_map_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    form_options_json, dosage_options_json, form_dosage_map_json, is_custom
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                 ON CONFLICT(mnn) DO UPDATE SET
                     category = excluded.category,
                     russian_name = excluded.russian_name,
@@ -134,6 +141,7 @@ class DrugRepository:
                     form_options_json = excluded.form_options_json,
                     dosage_options_json = excluded.dosage_options_json,
                     form_dosage_map_json = excluded.form_dosage_map_json
+                WHERE COALESCE(drugs.is_custom, 0) = 0
                 """,
                 [
                     (
@@ -165,6 +173,7 @@ class DrugRepository:
                     drugs.category, drugs.mnn, drugs.russian_name, drugs.latin_name, drugs.drug_form, drugs.dosage, drugs.packaging,
                     drugs.trade_names_json, drugs.search_aliases_json, drugs.scheme_options_json, drugs.trade_details_json,
                     drugs.form_options_json, drugs.dosage_options_json, drugs.form_dosage_map_json,
+                    COALESCE(drugs.is_custom, 0) AS is_custom,
                     custom_drug_schemes.scheme_options_json AS custom_scheme_options_json
                 FROM drugs
                 LEFT JOIN custom_drug_schemes USING (mnn)
@@ -280,6 +289,113 @@ class DrugRepository:
             connection.commit()
         return {"ok": True, "deleted": cursor.rowcount > 0, "name": template_name}
 
+    def upsert_custom_drug(self, payload: dict[str, Any]) -> dict[str, Any]:
+        mnn = str(payload.get("mnn") or "").strip()
+        russian = str(payload.get("russian_name") or "").strip()
+        if not mnn or not russian:
+            raise ValueError("МНН и русское название обязательны.")
+
+        latin = str(payload.get("latin_name") or "").strip() or mnn
+        drug_form = str(payload.get("drug_form") or "Tab.").strip() or "Tab."
+        dosage = str(payload.get("dosage") or "").strip() or "—"
+        packaging = str(payload.get("packaging") or "N30").strip() or "N30"
+        category = str(payload.get("category") or "Прочее").strip() or "Прочее"
+        trade_names = [
+            part.strip()
+            for part in str(payload.get("trade_names_raw") or payload.get("trade_names") or "").replace(",", ";").split(";")
+            if part.strip()
+        ]
+        if isinstance(payload.get("trade_names"), list):
+            trade_names = [str(x).strip() for x in payload["trade_names"] if str(x).strip()]
+        form_options = payload.get("form_options") or [drug_form]
+        dosage_options = payload.get("dosage_options") or ([dosage] if dosage and dosage != "—" else [])
+        form_dosage_map = payload.get("form_dosage_map") or {drug_form: list(dosage_options)}
+        scheme_options = payload.get("scheme_options") or [
+            "по 1 таблетке утром",
+            "по 1 таблетке вечером",
+            "по 1/2 таблетки на ночь",
+        ]
+        search_aliases = list(dict.fromkeys([
+            russian.lower(),
+            mnn.lower(),
+            *[name.lower() for name in trade_names],
+        ]))
+        trade_details = payload.get("trade_details") or {}
+        if trade_names and not trade_details:
+            qty_match = re.search(r"(\d+)", packaging)
+            qty = int(qty_match.group(1)) if qty_match else 30
+            trade_details = {
+                name: {
+                    dosage: {"packaging": packaging, "dispense_qty": qty, "form": drug_form},
+                }
+                for name in trade_names
+            }
+
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT is_custom FROM drugs WHERE mnn = ?",
+                (mnn,),
+            ).fetchone()
+            if existing and not int(existing["is_custom"] or 0):
+                raise ValueError(f"Препарат «{mnn}» уже есть в системном каталоге.")
+
+            connection.execute(
+                """
+                INSERT INTO drugs (
+                    category, mnn, russian_name, latin_name, drug_form, dosage, packaging,
+                    trade_names_json, search_aliases_json, scheme_options_json, trade_details_json,
+                    form_options_json, dosage_options_json, form_dosage_map_json, is_custom
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                ON CONFLICT(mnn) DO UPDATE SET
+                    category = excluded.category,
+                    russian_name = excluded.russian_name,
+                    latin_name = excluded.latin_name,
+                    drug_form = excluded.drug_form,
+                    dosage = excluded.dosage,
+                    packaging = excluded.packaging,
+                    trade_names_json = excluded.trade_names_json,
+                    search_aliases_json = excluded.search_aliases_json,
+                    scheme_options_json = excluded.scheme_options_json,
+                    trade_details_json = excluded.trade_details_json,
+                    form_options_json = excluded.form_options_json,
+                    dosage_options_json = excluded.dosage_options_json,
+                    form_dosage_map_json = excluded.form_dosage_map_json,
+                    is_custom = 1
+                """,
+                (
+                    category,
+                    mnn,
+                    russian,
+                    latin,
+                    drug_form,
+                    dosage,
+                    packaging,
+                    json.dumps(trade_names, ensure_ascii=False),
+                    json.dumps(search_aliases, ensure_ascii=False),
+                    json.dumps(scheme_options, ensure_ascii=False),
+                    json.dumps(trade_details, ensure_ascii=False),
+                    json.dumps(form_options, ensure_ascii=False),
+                    json.dumps(dosage_options, ensure_ascii=False),
+                    json.dumps(form_dosage_map, ensure_ascii=False),
+                ),
+            )
+            connection.commit()
+        return {"ok": True, "mnn": mnn, "is_custom": True}
+
+    def delete_custom_drug(self, mnn: str) -> dict[str, Any]:
+        key = str(mnn or "").strip()
+        if not key:
+            raise ValueError("MNN is required.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM drugs WHERE mnn = ? AND COALESCE(is_custom, 0) = 1",
+                (key,),
+            )
+            connection.commit()
+            if cursor.rowcount <= 0:
+                raise ValueError("Можно удалять только препараты, добавленные вручную.")
+        return {"ok": True, "deleted": True, "mnn": key}
+
     def save_drug_schemes(self, mnn: str, scheme_options: list[str]) -> dict[str, Any]:
         key = str(mnn or "").strip()
         if not key:
@@ -354,4 +470,5 @@ class DrugRepository:
             "scheme_options": scheme_options,
             "has_custom_scheme": has_custom_scheme,
             "trade_details": json.loads(row["trade_details_json"] or "{}"),
+            "is_custom": bool(row["is_custom"]) if "is_custom" in keys else False,
         }
