@@ -920,6 +920,13 @@ function indexDailyAvailability(payload) {
             }
         }
     }
+    const incomingKeys = payload?.by_key && typeof payload.by_key === "object" ? payload.by_key : {};
+    for (const [key, row] of Object.entries(incomingKeys)) {
+        const normalized = availabilityKey(key);
+        if (normalized && row && typeof row === "object") {
+            byKey[normalized] = row;
+        }
+    }
     dailyAvailability = {
         date: payload?.date || "",
         fresh: Boolean(payload?.fresh),
@@ -1552,6 +1559,42 @@ async function waitForDailyAvailability(timeoutMs = 90000) {
     return dailyAvailability;
 }
 
+async function forceCheckDailyAvailability() {
+    const button = document.getElementById("forceAvailabilityBtn");
+    if (button) {
+        button.disabled = true;
+    }
+    setStatus("Принудительная проверка наличия на tabletka.by…");
+    const body = document.getElementById("availabilityTableBody");
+    if (body) {
+        body.innerHTML = "<tr><td colspan=\"4\">Идёт принудительная проверка tabletka.by…</td></tr>";
+    }
+    try {
+        await loadDailyAvailability({ start: true, force: true });
+        await refreshAvailabilityTable();
+        const started = Date.now();
+        while (dailyAvailability.checking && Date.now() - started < 180000) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1500));
+            await loadDailyAvailability();
+            await refreshAvailabilityTable();
+        }
+        if (dailyAvailability.fresh) {
+            setStatus(dailyAvailability.message || `Наличие обновлено: ${dailyAvailability.rows.length} препаратов.`);
+        } else if (dailyAvailability.checking) {
+            setStatus("Проверка ещё идёт в фоне — таблица обновится сама.");
+        } else {
+            setStatus(dailyAvailability.message || "Проверка наличия завершилась без данных. Нажмите «Проверить сейчас» ещё раз.");
+        }
+    } catch (error) {
+        console.error(error);
+        setStatus("Не удалось запустить проверку наличия.");
+    } finally {
+        if (button) {
+            button.disabled = false;
+        }
+    }
+}
+
 async function refreshAvailabilityTable() {
     const body = document.getElementById("availabilityTableBody");
     if (!body) {
@@ -1564,7 +1607,7 @@ async function refreshAvailabilityTable() {
         return;
     }
     if (!rows.length) {
-        body.innerHTML = "<tr><td colspan=\"4\" class=\"text-muted\">Наличие ещё не проверено сегодня. Перезапустите программу утром — проверка запустится сама.</td></tr>";
+        body.innerHTML = "<tr><td colspan=\"4\" class=\"text-muted\">Наличие ещё не проверено. Нажмите «Проверить сейчас».</td></tr>";
         return;
     }
     body.innerHTML = rows.map((row) => `
@@ -2781,6 +2824,12 @@ async function initPrototype() {
     if (refreshAvailabilityBtn) {
         refreshAvailabilityBtn.addEventListener("click", () => {
             refreshAvailabilityTable();
+        });
+    }
+    const forceAvailabilityBtn = document.getElementById("forceAvailabilityBtn");
+    if (forceAvailabilityBtn) {
+        forceAvailabilityBtn.addEventListener("click", () => {
+            forceCheckDailyAvailability();
         });
     }
 

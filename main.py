@@ -310,7 +310,10 @@ def refresh_catalog_availability(limit=20):
     """Возвращает дневной кэш; limit оставлен для совместимости."""
     _ = limit
     snapshot = AVAILABILITY.snapshot()
-    if not snapshot.get("fresh") and not snapshot.get("checking"):
+    if not snapshot.get("checking") and (
+        not snapshot.get("fresh")
+        or not any(str(row.get("status") or "") in {"good", "low", "none"} for row in (snapshot.get("rows") or []))
+    ):
         snapshot = AVAILABILITY.ensure_today(REPOSITORY.list_drugs())
     return {
         "ok": True,

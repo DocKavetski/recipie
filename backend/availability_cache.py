@@ -68,6 +68,12 @@ def is_fresh(payload: dict[str, Any] | None, day: str | None = None) -> bool:
     return str(data.get("date") or "") == (day or today_key()) and bool(data.get("rows"))
 
 
+def has_useful_rows(payload: dict[str, Any] | None) -> bool:
+    """Есть ли хоть один реальный статус — не только «Нет данных» после сбоя сети."""
+    rows = (payload or {}).get("rows") or []
+    return any(str(row.get("status") or "") in {"good", "low", "none"} for row in rows)
+
+
 def _row_keys(drug: dict[str, Any]) -> list[str]:
     keys = [
         _normalize(drug.get("mnn")),
@@ -137,6 +143,7 @@ class DailyAvailabilityStore:
         self._lock = threading.RLock()
         self._thread: threading.Thread | None = None
         self._checking = False
+        self._pending_force: list[dict[str, Any]] | None = None
         self._cache = load_cache(self.path)
 
     def snapshot(self) -> dict[str, Any]:
@@ -147,6 +154,7 @@ class DailyAvailabilityStore:
                 "fresh": is_fresh(self._cache),
                 "checking": self._checking,
                 "rows": list(self._cache.get("rows") or []),
+                "by_key": dict(self._cache.get("by_key") or {}),
                 "message": self._cache.get("message")
                 or (
                     "Проверяю наличие на сегодня…"
@@ -161,11 +169,15 @@ class DailyAvailabilityStore:
 
     def ensure_today(self, drugs: list[dict[str, Any]], *, force: bool = False) -> dict[str, Any]:
         with self._lock:
-            if not force and is_fresh(self._cache):
+            if not force and is_fresh(self._cache) and has_useful_rows(self._cache):
                 return self.snapshot()
             if self._checking:
+                if force:
+                    self._pending_force = list(drugs)
+                    self._cache["message"] = "После текущей проверки запущу ещё раз…"
                 return self.snapshot()
             self._checking = True
+            self._pending_force = None
             self._thread = threading.Thread(
                 target=self._refresh,
                 args=(list(drugs), force),
@@ -178,7 +190,7 @@ class DailyAvailabilityStore:
     def _refresh(self, drugs: list[dict[str, Any]], force: bool) -> None:
         try:
             with self._lock:
-                if not force and is_fresh(self._cache):
+                if not force and is_fresh(self._cache) and has_useful_rows(self._cache):
                     return
             built = build_daily_cache(drugs, checker=self.checker)
             save_cache(self.path, built)
@@ -190,5 +202,10 @@ class DailyAvailabilityStore:
             with self._lock:
                 self._cache["message"] = "Не удалось обновить наличие на сегодня."
         finally:
+            pending: list[dict[str, Any]] | None = None
             with self._lock:
                 self._checking = False
+                pending = self._pending_force
+                self._pending_force = None
+            if pending is not None:
+                self.ensure_today(pending, force=True)
