@@ -80,6 +80,7 @@
                             <span class="hint-kbd">Enter</span> добавить ·
                             <span class="hint-kbd">↑</span><span class="hint-kbd">↓</span> выбрать ·
                             <span class="hint-kbd">Esc</span> закрыть ·
+                            крестик слева — удалить строку ·
                             или «Добавить вручную» — заполнить поля самому
                         </div>
                     </div>
@@ -88,6 +89,7 @@
                         <table class="table table-sm table-hover align-middle recipe-table mb-0">
                             <thead>
                                 <tr>
+                                    <th class="recipe-col-remove" title="Удалить строку"></th>
                                     <th style="min-width: 110px;">Режим</th>
                                     <th style="min-width: 150px;">Торговое название</th>
                                     <th style="min-width: 120px;">МНН</th>
@@ -98,7 +100,6 @@
                                     <th style="min-width: 148px;">D.t.d. №</th>
                                     <th style="min-width: 220px;" title="Можно выбрать из списка или ввести вручную">Схема</th>
                                     <th style="min-width: 90px;" title="Наличие в аптеках Минска (tabletka.by)">Наличие</th>
-                                    <th style="min-width: 60px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="drugRows"></tbody>
@@ -203,6 +204,7 @@
                         <table class="table table-sm table-hover align-middle recipe-table template-recipe-table mb-0">
                             <thead>
                                 <tr>
+                                    <th class="recipe-col-remove" title="Удалить строку"></th>
                                     <th style="min-width: 110px;">Режим</th>
                                     <th style="min-width: 150px;">Торговое название</th>
                                     <th style="min-width: 120px;">МНН</th>
@@ -213,7 +215,6 @@
                                     <th style="min-width: 148px;">D.t.d. №</th>
                                     <th style="min-width: 220px;">Схема</th>
                                     <th class="template-col-availability" style="min-width: 90px;">Наличие</th>
-                                    <th style="min-width: 60px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="templateDrugRows"></tbody>
@@ -388,6 +389,16 @@
 
     <template id="drugRowTemplate">
         <tr class="drug-row">
+            <td class="recipe-col-remove">
+                <button
+                    class="btn btn-sm remove-row-btn"
+                    type="button"
+                    title="Удалить препарат из списка"
+                    aria-label="Удалить препарат"
+                >
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+            </td>
             <td>
                 <select class="form-select form-select-sm drug-mode-select">
                     <option value="mnn">МНН</option>
@@ -429,11 +440,6 @@
                 <datalist class="drug-scheme-datalist"></datalist>
             </td>
             <td><span class="status-badge status-good drug-availability-badge">Есть</span></td>
-            <td class="text-end">
-                <button class="btn btn-sm btn-link text-danger px-1 remove-row-btn" type="button">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </td>
         </tr>
     </template>
 

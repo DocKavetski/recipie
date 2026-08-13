@@ -1460,11 +1460,20 @@ function bindFormDosageSelects(row) {
 }
 
 function bindRowRemoval(row, container = drugRowsContainer) {
-    row.querySelector(".remove-row-btn").addEventListener("click", () => {
+    const button = row.querySelector(".remove-row-btn");
+    if (!button || button.dataset.bound) {
+        return;
+    }
+    button.addEventListener("click", () => {
+        const label = row.querySelector(".drug-russian-input")?.value.trim()
+            || row.querySelector(".drug-mnn-input")?.value.trim()
+            || "препарат";
         row.remove();
         refreshDrugsEmptyState(container);
-        setStatus("Строка препарата удалена.");
+        scheduleAutosave();
+        setStatus(`«${label}» удалён из списка.`);
     });
+    button.dataset.bound = "true";
 }
 
 function populateRow(row, drug, options = {}) {
