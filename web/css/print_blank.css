@@ -268,6 +268,20 @@ table.form tr:last-child td {
 .rx .drug { font-size: 11px; }
 .rx .sig-small { font-size: 9px; }
 
+.rx-void {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 16mm;
+}
+
+.rx-void-mark {
+    display: block;
+    width: 88%;
+    height: 78%;
+    margin: 1.5mm auto 0;
+}
+
 .sign-block {
   padding-top: 5mm !important;
   line-height: 1.2;

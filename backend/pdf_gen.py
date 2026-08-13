@@ -102,6 +102,28 @@ def _draw_cell(pdf: canvas.Canvas, x: float, y: float, w: float, h: float) -> No
     pdf.rect(x, y, w, h)
 
 
+def _draw_void_z(pdf: canvas.Canvas, x: float, y: float, w: float, h: float) -> None:
+    """Символ закрытия поля Ƶ (Z со штрихом): пустую строку нельзя дописать."""
+    pad_x = 4 * mm
+    pad_y = 3.2 * mm
+    left = x + pad_x
+    right = x + w - pad_x
+    top = y + h - pad_y
+    bottom = y + pad_y
+    mid_y = (top + bottom) / 2
+    pdf.saveState()
+    pdf.setStrokeColorRGB(0.12, 0.12, 0.12)
+    pdf.setLineCap(1)
+    pdf.setLineJoin(1)
+    pdf.setLineWidth(1.7)
+    pdf.line(left, top, right, top)
+    pdf.line(right, top, left, bottom)
+    pdf.line(left, bottom, right, bottom)
+    pdf.setLineWidth(1.35)
+    pdf.line(left + 1.2 * mm, mid_y, right - 1.2 * mm, mid_y)
+    pdf.restoreState()
+
+
 def _draw_paragraphs(
     pdf: canvas.Canvas,
     lines: list[str],
@@ -221,6 +243,10 @@ def _draw_front(
                     pdf.setFont(font, size)
                     pdf.drawString(left + c1 + 1.2 * mm, cursor - size, wrapped)
                     cursor -= size + 1.2
+        elif drugs:
+            # На бланке одно назначение — пустое Rp закрываем символом Ƶ,
+            # чтобы туда нельзя было дописать второй препарат.
+            _draw_void_z(pdf, left + c1, y, c2 + c3, row_h)
 
     # --- row 5: signature (3rd Rp) ---
     y -= h5
