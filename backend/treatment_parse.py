@@ -6,7 +6,12 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from backend.trade_packaging import resolve_mnn_packaging, resolve_trade_packaging
+from backend.trade_packaging import (
+    dosage_from_trade_name,
+    dosages_for_trade,
+    resolve_mnn_packaging,
+    resolve_trade_packaging,
+)
 
 
 _SKIP_LINE = re.compile(
@@ -208,10 +213,23 @@ def pick_catalog_form(drug: dict[str, Any], requested: str) -> str:
     return str(drug.get("drug_form") or options[0])
 
 
-def pick_catalog_dosage(drug: dict[str, Any], requested: str, form: str) -> str:
+def pick_catalog_dosage(
+    drug: dict[str, Any],
+    requested: str,
+    form: str,
+    trade: str = "",
+) -> str:
     form_map = drug.get("form_dosage_map") or {}
     mapped = form_map.get(form) if isinstance(form_map, dict) else None
     options = [str(x).strip() for x in (mapped or drug.get("dosage_options") or []) if str(x).strip()]
+    trade_doses = dosages_for_trade(drug.get("trade_details"), trade) if trade else []
+    if trade_doses:
+        trade_norm = {normalize_dose(item) for item in trade_doses}
+        filtered = [item for item in options if normalize_dose(item) in trade_norm]
+        options = filtered or list(trade_doses)
+    if not requested and trade:
+        requested = dosage_from_trade_name(trade, options or trade_doses)
+
     if not options:
         default = str(drug.get("dosage") or "").strip()
         return requested or default
@@ -227,8 +245,13 @@ def pick_catalog_dosage(drug: dict[str, Any], requested: str, form: str) -> str:
             for option in options:
                 if normalize_dose(option).startswith(want_num.group(0)):
                     return option
+        if trade_doses:
+            inferred = dosage_from_trade_name(trade, options)
+            return inferred or options[0]
         return requested
 
+    if trade_doses:
+        return options[0]
     return str(drug.get("dosage") or options[0])
 
 
@@ -316,8 +339,8 @@ def drug_payload_from_match(
 ) -> dict[str, Any]:
     drug = entry.drug
     form = pick_catalog_form(drug, drug_form)
-    dose = pick_catalog_dosage(drug, dosage, form)
     selected_trade = entry.display if entry.kind == "trade" else ""
+    dose = pick_catalog_dosage(drug, dosage, form, selected_trade)
     mode = "trade" if selected_trade else "mnn"
     # "packaging" (фасовка) берём из базы и/или trade_details,
     # а "dispenseQty" (D.t.d.) — это количество для выдачи.
@@ -371,14 +394,21 @@ def parse_treatment_line(line: str, index: list[_NameEntry]) -> dict[str, Any] |
     head, scheme = split_head_and_scheme(line)
     pack_qty, head = extract_pack_qty(head)
     form, head = extract_form(head)
+    head_before_dose = head
     dosage, head = extract_dosage(head)
     # Скобки с перечнем торговых — не мешают поиску МНН в начале строки
     head_for_match = strip_parentheticals(head) or head
     entry, remainder = find_drug_in_line(head_for_match, index)
     if not entry:
         entry, remainder = find_drug_in_line(head, index)
+    if not entry:
+        # «Кутипин 200 мг»: дозировка — часть торгового названия, её нельзя вырезать до поиска.
+        retry = strip_parentheticals(head_before_dose) or head_before_dose
+        entry, remainder = find_drug_in_line(retry, index)
         if not entry:
-            return None
+            entry, remainder = find_drug_in_line(head_before_dose, index)
+            if not entry:
+                return None
 
     form2, remainder = extract_form(remainder)
     dose2, remainder = extract_dosage(remainder)

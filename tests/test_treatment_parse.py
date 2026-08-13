@@ -211,3 +211,40 @@ def test_parsed_qty_ceils_to_pack_step_of_14(tmp_path: Path):
     drug = result["drugs"][0]
     assert drug["packaging"] == "N28"
     assert drug["dispenseQty"] == 98
+
+
+def test_kutipin_200_uses_only_200mg(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    for text in ("Кутипин 200 на ночь", "Кутипин 200 мг на ночь"):
+        result = parse_treatment_text(text, catalog)
+        assert result["ok"] is True, text
+        assert result["unmatched"] == []
+        drug = result["drugs"][0]
+        assert drug["mnn"] == "Quetiapine"
+        assert drug["selectedTrade"] == "Кутипин 200"
+        assert drug["mode"] == "trade"
+        assert drug["dosage"] == "200 мг"
+        assert drug["packaging"] == "N30"
+        assert "на ночь" in drug["selectedScheme"]
+
+
+def test_kutipin_25_uses_only_25mg(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    for text in ("Кутипин 25 на ночь", "Кутипин 25 мг на ночь"):
+        result = parse_treatment_text(text, catalog)
+        assert result["ok"] is True, text
+        drug = result["drugs"][0]
+        assert drug["selectedTrade"] == "Кутипин 25"
+        assert drug["dosage"] == "25 мг"
+        assert drug["packaging"] == "N30"
+
+
+def test_ketilept_dosage_picks_matching_pack(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    high = parse_treatment_text("Кетилепт 200 мг на ночь", catalog)["drugs"][0]
+    low = parse_treatment_text("Кетилепт 25 мг на ночь", catalog)["drugs"][0]
+    assert high["selectedTrade"] == "Кетилепт"
+    assert high["dosage"] == "200 мг"
+    assert high["packaging"] == "N60"
+    assert low["dosage"] == "25 мг"
+    assert low["packaging"] == "N30"

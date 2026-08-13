@@ -6,6 +6,9 @@ import re
 from typing import Any
 
 
+_TRADE_NUMBER_RE = re.compile(r"(?<!\d)(\d+(?:[.,]\d+)?)(?!\d)")
+
+
 def _normalize_dosage(value: str) -> str:
     text = str(value or "").strip().lower().replace("ё", "е").replace(",", ".")
     match = re.search(r"(\d+(?:\.\d+)?)\s*(мг|мкг|г|me|ме|%)\.?", text)
@@ -16,6 +19,41 @@ def _normalize_dosage(value: str) -> str:
     if unit.lower() in {"me", "ме"}:
         unit = "МЕ"
     return f"{amount} {unit}"
+
+
+def dosages_for_trade(trade_details: dict[str, Any] | None, trade: str) -> list[str]:
+    """Дозировки, которые реально есть у конкретного торгового названия."""
+    trade_name = str(trade or "").strip()
+    if not trade_name or not isinstance(trade_details, dict):
+        return []
+    entry = trade_details.get(trade_name)
+    if not isinstance(entry, dict) or not entry:
+        return []
+    if _is_nested_trade_entry(entry):
+        return [str(dose).strip() for dose in entry if str(dose).strip()]
+    dosage = str(entry.get("dosage") or "").strip()
+    return [dosage] if dosage else []
+
+
+def dosage_from_trade_name(trade: str, available: list[str] | None = None) -> str:
+    """«Кутипин 200» / «Финлепсин 200 ретард» → дозировка из названия, если она есть в фасовке."""
+    text = str(trade or "").strip()
+    numbers = [match.group(1).replace(",", ".") for match in _TRADE_NUMBER_RE.finditer(text)]
+    options = [str(item).strip() for item in (available or []) if str(item).strip()]
+    by_norm = {_normalize_dosage(item): item for item in options}
+    for number in reversed(numbers):
+        for unit in ("мг", "мкг", "г", "МЕ"):
+            key = _normalize_dosage(f"{number} {unit}")
+            if key in by_norm:
+                return by_norm[key]
+        for key, original in by_norm.items():
+            if key.startswith(number):
+                return original
+    if len(options) == 1:
+        return options[0]
+    if numbers:
+        return _normalize_dosage(f"{numbers[-1]} мг")
+    return ""
 
 
 def _is_nested_trade_entry(entry: dict[str, Any]) -> bool:
@@ -97,14 +135,26 @@ def resolve_trade_packaging(
         return None
 
     dose = str(dosage or "").strip()
-    normalized_dose = _normalize_dosage(dose)
+    normalized_dose = _normalize_dosage(dose) if dose else ""
 
     if _is_nested_trade_entry(entry):
         if dose and dose in entry and isinstance(entry[dose], dict):
             return dict(entry[dose])
-        for key, details in entry.items():
-            if _normalize_dosage(key) == normalized_dose and isinstance(details, dict):
-                return dict(details)
+        if normalized_dose:
+            for key, details in entry.items():
+                if _normalize_dosage(key) == normalized_dose and isinstance(details, dict):
+                    return dict(details)
+            return None
+        inferred = dosage_from_trade_name(trade_name, [str(key).strip() for key in entry])
+        if inferred:
+            inferred_norm = _normalize_dosage(inferred)
+            for key, details in entry.items():
+                if _normalize_dosage(key) == inferred_norm and isinstance(details, dict):
+                    return dict(details)
+        if len(entry) == 1:
+            only = next(iter(entry.values()))
+            if isinstance(only, dict):
+                return dict(only)
         return None
 
     entry_dose = str(entry.get("dosage") or "").strip()
