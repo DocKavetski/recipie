@@ -58,11 +58,22 @@ def register_repository_exposes(repository: Any) -> None:
     register_availability_exposes(repository)
 
 
+def drugs_for_availability(repository: Any) -> list[dict[str, Any]]:
+    """Все препараты для опроса наличия: каталог + архив."""
+    from backend.availability_cache import collect_availability_drugs
+
+    catalog = []
+    try:
+        catalog = list(repository.list_drugs() or [])
+    except Exception:  # noqa: BLE001
+        LOGGER.debug("list_drugs failed for availability", exc_info=True)
+    return collect_availability_drugs(catalog)
+
+
 def register_availability_exposes(repository: Any) -> None:
     """Регистрирует API наличия — важно для старого exe без обновлённого main.py."""
     global _AVAILABILITY_REGISTERED
-    if _AVAILABILITY_REGISTERED:
-        return
+    # Всегда перерегистрируем: в frozen main.py может остаться старый limit=20.
 
     try:
         import eel
@@ -83,20 +94,23 @@ def register_availability_exposes(repository: Any) -> None:
 
     @eel.expose
     def ensure_daily_availability(force=False):
-        return store.ensure_today(repository.list_drugs(), force=bool(force))
+        return store.ensure_today(drugs_for_availability(repository), force=bool(force))
 
     @eel.expose
-    def refresh_catalog_availability(limit=20, force=False):
+    def refresh_catalog_availability(limit=0, force=False):
+        # limit больше не режет список: старые клиенты передавали 0/20.
         _ = limit
+        drugs = drugs_for_availability(repository)
         if force:
-            snapshot = store.ensure_today(repository.list_drugs(), force=True)
+            snapshot = store.ensure_today(drugs, force=True)
         else:
             snapshot = store.snapshot()
             if not snapshot.get("checking") and (
                 not snapshot.get("fresh")
                 or not snapshot.get("useful")
+                or len(snapshot.get("rows") or []) < max(1, int(len(drugs) * 0.9))
             ):
-                snapshot = store.ensure_today(repository.list_drugs())
+                snapshot = store.ensure_today(drugs)
         return {
             "ok": True,
             "city": "Минск",
@@ -108,10 +122,11 @@ def register_availability_exposes(repository: Any) -> None:
             "by_key": snapshot.get("by_key") or {},
             "progress": snapshot.get("progress"),
             "message": snapshot.get("message"),
+            "total": len(drugs),
         }
 
     _AVAILABILITY_REGISTERED = True
     LOGGER.info(
         "Registered runtime availability exposes: get_daily_availability, "
-        "ensure_daily_availability, refresh_catalog_availability"
+        "ensure_daily_availability, refresh_catalog_availability (full catalog+archive)"
     )

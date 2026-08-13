@@ -17,7 +17,7 @@ _bootstrap_frozen_overrides()
 
 import eel
 
-from backend.availability_cache import shared_store
+from backend.availability_cache import collect_availability_drugs, shared_store
 from backend.custom_drug_add import add_custom_drug_from_tabletka
 from backend.db import DrugRepository
 from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
@@ -273,6 +273,10 @@ def search_tabletka_drugs(query):
     ]
 
 
+def _availability_drugs():
+    return collect_availability_drugs(REPOSITORY.list_drugs())
+
+
 @eel.expose
 def get_daily_availability():
     return AVAILABILITY.snapshot()
@@ -280,8 +284,8 @@ def get_daily_availability():
 
 @eel.expose
 def ensure_daily_availability(force=False):
-    """Опрос tabletka.by; force=True — принудительно, даже если кэш на сегодня есть."""
-    return AVAILABILITY.ensure_today(REPOSITORY.list_drugs(), force=bool(force))
+    """Опрос tabletka.by по всему каталогу и архиву; force=True — принудительно."""
+    return AVAILABILITY.ensure_today(_availability_drugs(), force=bool(force))
 
 
 @eel.expose
@@ -306,18 +310,20 @@ def check_drug_availability(query, aliases=None):
 
 
 @eel.expose
-def refresh_catalog_availability(limit=20, force=False):
-    """Возвращает дневной кэш; force запускает повторный опрос."""
+def refresh_catalog_availability(limit=0, force=False):
+    """Возвращает дневной кэш; limit игнорируется (раньше резал до 20)."""
     _ = limit
+    drugs = _availability_drugs()
     if force:
-        snapshot = AVAILABILITY.ensure_today(REPOSITORY.list_drugs(), force=True)
+        snapshot = AVAILABILITY.ensure_today(drugs, force=True)
     else:
         snapshot = AVAILABILITY.snapshot()
         if not snapshot.get("checking") and (
             not snapshot.get("fresh")
             or not any(str(row.get("status") or "") in {"good", "low", "none"} for row in (snapshot.get("rows") or []))
+            or len(snapshot.get("rows") or []) < max(1, int(len(drugs) * 0.9))
         ):
-            snapshot = AVAILABILITY.ensure_today(REPOSITORY.list_drugs())
+            snapshot = AVAILABILITY.ensure_today(drugs)
     return {
         "ok": True,
         "city": "Минск",
@@ -329,6 +335,7 @@ def refresh_catalog_availability(limit=20, force=False):
         "by_key": snapshot.get("by_key") or {},
         "progress": snapshot.get("progress"),
         "message": snapshot.get("message"),
+        "total": len(drugs),
     }
 
 
@@ -373,7 +380,7 @@ def main() -> None:
     cleanup_update_artifacts()
     REPOSITORY.initialize()
     SETTINGS.load()
-    AVAILABILITY.ensure_today(REPOSITORY.list_drugs())
+    AVAILABILITY.ensure_today(_availability_drugs())
     web_dir = resource_path("web")
     eel.init(str(web_dir))
     eel.start(

@@ -7,6 +7,8 @@ from pathlib import Path
 from backend.availability_cache import (
     DailyAvailabilityStore,
     build_daily_cache,
+    cache_covers_drugs,
+    collect_availability_drugs,
     has_useful_rows,
     is_fresh,
     lookup_cached,
@@ -196,3 +198,59 @@ def test_shared_store_is_singleton(tmp_path: Path):
     second = availability_cache.shared_store(tmp_path / "other")
     assert first is second
     availability_cache._SHARED_STORE = None
+
+
+def test_collect_availability_drugs_includes_archive():
+    from backend.seed_loader import load_archived_drugs, load_seed_drugs
+
+    catalog = load_seed_drugs()
+    archived = load_archived_drugs()
+    merged = collect_availability_drugs(catalog)
+    assert len(merged) >= len(catalog) + len(archived) - 1
+    assert any(item.get("archived") for item in merged)
+    assert any(item["mnn"] == "Vilazodone" and item.get("archived") for item in merged)
+    assert any(item["mnn"] == "Sertraline" and not item.get("archived") for item in merged)
+
+
+def test_incomplete_cache_triggers_full_recheck(tmp_path: Path):
+    calls = []
+
+    def counting_checker(query, aliases=None):
+        calls.append(query)
+        return _fake_checker(query, aliases)
+
+    store = DailyAvailabilityStore(tmp_path, checker=counting_checker)
+    # Имитируем старый кэш «только 20»: две полезные строки при пяти препаратах.
+    partial_drugs = [
+        {"mnn": f"M{i}", "russian_name": f"Препарат{i}", "trade_names": []}
+        for i in range(2)
+    ]
+    store.ensure_today(partial_drugs)
+    if store._thread:
+        store._thread.join(timeout=2)
+    assert has_useful_rows(store.snapshot())
+    assert len(store.snapshot()["rows"]) == 2
+
+    full_drugs = [
+        {"mnn": f"M{i}", "russian_name": f"Препарат{i}", "trade_names": []}
+        for i in range(5)
+    ]
+    assert cache_covers_drugs(store.snapshot(), full_drugs) is False
+    before = len(calls)
+    store.ensure_today(full_drugs)
+    if store._thread:
+        store._thread.join(timeout=2)
+    assert len(calls) > before
+    assert len(store.snapshot()["rows"]) == 5
+    assert cache_covers_drugs(store.snapshot(), full_drugs) is True
+
+
+def test_build_marks_archived_rows():
+    drugs = [
+        {"mnn": "A", "russian_name": "Активный", "trade_names": [], "archived": False},
+        {"mnn": "B", "russian_name": "Архивный", "trade_names": [], "archived": True},
+    ]
+    cache = build_daily_cache(drugs, checker=_fake_checker)
+    by_mnn = {row["mnn"]: row for row in cache["rows"]}
+    assert by_mnn["A"]["archived"] is False
+    assert by_mnn["B"]["archived"] is True
