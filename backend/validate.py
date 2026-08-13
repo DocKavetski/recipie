@@ -5,8 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from backend.patient_parse import format_name_with_initials, normalize_birth_date, parse_birth_date
-from backend.dispense_rules import dispense_step_by_packaging
+from backend.patient_parse import (
+    format_name_with_initials,
+    normalize_birth_date,
+    normalize_card_number,
+    parse_birth_date,
+)
+from backend.dispense_rules import ceil_to_dispense_step, dispense_step_by_packaging
 from backend.numbers_ru import extract_default_dispense_qty
 
 
@@ -79,13 +84,28 @@ def normalize_prescription_payload(payload: dict[str, Any] | None) -> dict[str, 
     data["patient_name"] = format_name_with_initials(data.get("patient_name", ""))
     data["birth_date"] = normalize_birth_date(data.get("birth_date", ""))
     data["doctor_name"] = str(data.get("doctor_name") or "").strip()
-    data["card_number"] = str(data.get("card_number") or "").strip()
+    data["card_number"] = normalize_card_number(data.get("card_number", ""))
     drugs = []
     for drug in data.get("drugs") or []:
         if not str(drug.get("mnn") or "").strip():
             continue
         item = dict(drug)
-        item["dispenseQty"] = item.get("dispenseQty") or 1
+        raw_qty = item.get("dispenseQty")
+        try:
+            qty_num = int(str(raw_qty).strip())
+        except (TypeError, ValueError):
+            try:
+                qty_num = int(float(str(raw_qty).strip()))
+            except (TypeError, ValueError):
+                qty_num = 0
+        if qty_num < 1:
+            packaging = item.get("packaging")
+            item["dispenseQty"] = ceil_to_dispense_step(
+                extract_default_dispense_qty(packaging),
+                packaging,
+            )
+        else:
+            item["dispenseQty"] = qty_num
         drugs.append(item)
     data["drugs"] = drugs
     return data

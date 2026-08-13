@@ -321,7 +321,7 @@ function getRowState(row) {
 
 function getFormState() {
     return {
-        card_number: cardNumberInput.value.trim(),
+        card_number: normalizeCardNumber(cardNumberInput.value),
         patient_name: formatNameWithInitials(patientNameInput.value),
         birth_date: normalizeBirthDate(birthDateInput.value),
         doctor_name: recipeDoctorInput.value.trim(),
@@ -829,7 +829,7 @@ function initPatientSmartInput() {
 }
 
 async function loadHistoryByCardNumber(cardNumber, options = {}) {
-    const card = String(cardNumber || "").trim();
+    const card = normalizeCardNumber(cardNumber);
     if (!card) {
         setStatus("Введите номер карты для загрузки истории.");
         return false;
@@ -996,7 +996,7 @@ function availabilityFromLabel(label) {
 }
 
 function normalizeText(value) {
-    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+    return String(value || "").trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
 }
 
 function fillOptions(select, options, selectedValue) {
@@ -2138,7 +2138,8 @@ function cleanTreatmentSchemeLocal(value) {
         .replace(/\([^)]*\)/g, " ")
         .replace(/[()]/g, " ")
         .replace(/\s+/g, " ")
-        .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+        .replace(/^[,.;\s]+|[,.;\s]+$/g, "")
+        .replace(/(\b(?:утром|вечером|днём|днем|ночь|сном|еды|потребности|день))\s+\d+$/i, "$1");
 }
 
 function stripTreatmentParentheticalsLocal(line) {
@@ -2320,7 +2321,7 @@ function parseTreatmentTextLocal(text, catalog = catalogDrugs) {
             drug_form: form,
             dosage,
             packaging,
-            dispenseQty: packQty || undefined,
+            dispenseQty: packQty != null ? ceilToDispenseStep(packQty, packaging) : undefined,
             selectedTrade,
             selectedScheme: cleanTreatmentSchemeLocal(scheme),
             mode,

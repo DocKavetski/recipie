@@ -5,12 +5,30 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from backend.patient_parse import normalize_card_number
 from backend.seed_loader import load_seed_drugs
 from backend.template_payload import normalize_template_payload
 
 
 LOGGER = logging.getLogger(__name__)
 SEED_DRUGS = load_seed_drugs()
+
+
+def _fold_search(value: Any) -> str:
+    return str(value or "").strip().lower().replace("ё", "е")
+
+
+def _clean_option_text(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("label", "name", "text", "value", "dosage", "trade_name"):
+            text = str(value.get(key) or "").strip()
+            if text and text != "[object Object]" and not text.startswith("{"):
+                return text
+        return ""
+    text = str(value or "").strip()
+    if not text or text == "[object Object]" or text.startswith("{"):
+        return ""
+    return text
 
 
 class DrugRepository:
@@ -183,7 +201,7 @@ class DrugRepository:
             return [self._row_to_dict(row) for row in cursor.fetchall()]
 
     def search_drugs(self, query: str) -> list[dict[str, Any]]:
-        normalized_query = query.strip().lower()
+        normalized_query = _fold_search(query)
         if not normalized_query:
             return []
 
@@ -196,24 +214,29 @@ class DrugRepository:
                 *drug["trade_names"],
                 *drug["search_aliases"],
             ]
-            if any(normalized_query in value.lower() for value in candidates):
+            if any(normalized_query in _fold_search(value) for value in candidates if value):
                 matches.append(drug)
         return matches
 
     def save_history_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
-        card_number = str(payload.get("card_number", "")).strip()
+        card_number = normalize_card_number(payload.get("card_number", ""))
         if not card_number:
             raise ValueError("Card number is required to save history.")
 
+        stored = dict(payload or {})
+        stored["card_number"] = card_number
         with self._connect() as connection:
             connection.execute(
                 "INSERT INTO history (card_number, payload_json) VALUES (?, ?)",
-                (card_number, json.dumps(payload, ensure_ascii=False)),
+                (card_number, json.dumps(stored, ensure_ascii=False)),
             )
             connection.commit()
         return {"ok": True}
 
     def get_last_history_entry(self, card_number: str) -> dict[str, Any] | None:
+        key = normalize_card_number(card_number)
+        if not key:
+            return None
         with self._connect() as connection:
             cursor = connection.execute(
                 """
@@ -223,10 +246,18 @@ class DrugRepository:
                 ORDER BY id DESC
                 LIMIT 1
                 """,
-                (card_number.strip(),),
+                (key,),
             )
             row = cursor.fetchone()
-            return json.loads(row["payload_json"]) if row else None
+            if row:
+                return json.loads(row["payload_json"])
+            cursor = connection.execute(
+                "SELECT card_number, payload_json FROM history ORDER BY id DESC LIMIT 200"
+            )
+            for item in cursor.fetchall():
+                if normalize_card_number(item["card_number"]) == key:
+                    return json.loads(item["payload_json"])
+        return None
 
     def count_history_entries(self) -> int:
         with self._connect() as connection:
@@ -272,10 +303,13 @@ class DrugRepository:
             return [{"name": row["name"], "created_at": row["created_at"]} for row in cursor.fetchall()]
 
     def get_template(self, name: str) -> dict[str, Any] | None:
+        key = str(name or "").strip()
+        if not key:
+            return None
         with self._connect() as connection:
             cursor = connection.execute(
                 "SELECT payload_json FROM templates WHERE name = ?",
-                (name.strip(),),
+                (key,),
             )
             row = cursor.fetchone()
             return json.loads(row["payload_json"]) if row else None
@@ -432,7 +466,7 @@ class DrugRepository:
 
         cleaned: list[str] = []
         for scheme in scheme_options or []:
-            text = str(scheme or "").strip()
+            text = _clean_option_text(scheme)
             if text and text not in cleaned:
                 cleaned.append(text)
         if not cleaned:
@@ -505,21 +539,19 @@ class DrugRepository:
         scheme_options = json.loads(row["scheme_options_json"])
         if not isinstance(scheme_options, list):
             scheme_options = []
-        scheme_options = [
-            str(x).strip()
-            for x in scheme_options
-            if str(x).strip() and "[object Object]" not in str(x) and not str(x).startswith("{")
-        ]
+        scheme_options = [text for text in (_clean_option_text(x) for x in scheme_options) if text]
         has_custom_scheme = False
         if "custom_scheme_options_json" in keys and row["custom_scheme_options_json"]:
             custom_schemes = json.loads(row["custom_scheme_options_json"])
             if isinstance(custom_schemes, list):
-                scheme_options = [
-                    str(x).strip()
-                    for x in custom_schemes
-                    if str(x).strip() and "[object Object]" not in str(x) and not str(x).startswith("{")
-                ]
+                scheme_options = [text for text in (_clean_option_text(x) for x in custom_schemes) if text]
                 has_custom_scheme = True
+        raw_aliases = json.loads(row["search_aliases_json"])
+        search_aliases = (
+            [text for text in (_clean_option_text(x) for x in raw_aliases) if text]
+            if isinstance(raw_aliases, list)
+            else []
+        )
         return {
             "category": row["category"],
             "mnn": row["mnn"],
@@ -532,7 +564,7 @@ class DrugRepository:
             "dosage_options": dosage_options,
             "form_dosage_map": form_dosage_map,
             "trade_names": trade_names,
-            "search_aliases": json.loads(row["search_aliases_json"]),
+            "search_aliases": search_aliases,
             "scheme_options": scheme_options,
             "has_custom_scheme": has_custom_scheme,
             "trade_details": json.loads(row["trade_details_json"] or "{}"),
