@@ -19,6 +19,8 @@ import eel
 
 from backend.db import DrugRepository
 from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
+from backend.doctor_change import change_doctor as change_doctor_service
+from backend.doctor_change import clear_patient_data as clear_patient_data_service
 from backend.pdf_gen import generate_prescription_pdf
 from backend.print_preview import build_preview_context
 from backend.runtime_control import build_restart_command, hard_exit, spawn_restart
@@ -171,6 +173,25 @@ def get_app_settings():
 @eel.expose
 def save_doctor_name(doctor_name):
     return SETTINGS.update_doctor_name(doctor_name)
+
+
+@eel.expose
+def change_doctor(doctor_name):
+    """Смена врача: сохраняет ФИО и очищает только историю пациентов.
+
+    Каталог препаратов, шаблоны и пользовательские схемы не затрагиваются.
+    """
+    return change_doctor_service(
+        settings_store=SETTINGS,
+        repository=REPOSITORY,
+        doctor_name=doctor_name,
+    )
+
+
+@eel.expose
+def clear_patient_data():
+    """Очистка истории пациентов без затрагивания каталога препаратов."""
+    return clear_patient_data_service(settings_store=SETTINGS, repository=REPOSITORY)
 
 
 @eel.expose

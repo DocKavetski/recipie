@@ -1606,44 +1606,146 @@ function initDoctorModal() {
     return doctorModalInstance;
 }
 
-async function saveDoctorNameToBackend(doctorName) {
+async function clearCurrentPatientFields() {
+    cardNumberInput.value = "";
+    patientNameInput.value = "";
+    birthDateInput.value = "";
+    if (patientSmartInput) {
+        patientSmartInput.value = "";
+    }
+    if (ageValue) {
+        ageValue.value = "";
+    }
+    syncPatientSmartFromFields();
+    if (typeof clearTreatmentParseInput === "function") {
+        clearTreatmentParseInput();
+    }
+}
+
+async function saveDoctorNameToBackend(doctorName, options = {}) {
     const trimmedName = String(doctorName || "").trim();
+    const previousName = String(recipeDoctorInput?.value || settingsDoctorInput?.value || "").trim();
+    const isChange = Boolean(options.clearPatientsOnChange && trimmedName && trimmedName !== previousName);
     syncDoctorInputs(trimmedName);
 
-    if (!window.eel || typeof window.eel.save_doctor_name !== "function") {
+    if (!window.eel) {
         setStatus("Имя врача обновлено локально.");
-        return;
+        return { ok: true, local: true };
     }
 
     try {
-        await window.eel.save_doctor_name(trimmedName)();
+        let result;
+        if (isChange && typeof window.eel.change_doctor === "function") {
+            if (!window.confirm(
+                "Сменить врача?\n\nИстория пациентов будет очищена.\nКаталог препаратов и шаблоны сохранятся.",
+            )) {
+                syncDoctorInputs(previousName);
+                setStatus("Смена врача отменена.");
+                return { ok: false, cancelled: true };
+            }
+            result = await window.eel.change_doctor(trimmedName)();
+            await clearCurrentPatientFields();
+            clearDrugRows();
+            await saveAutosaveState();
+            const deleted = result?.history_deleted || 0;
+            setStatus(
+                deleted
+                    ? `Врач сохранён. История пациентов очищена (${deleted}). Каталог сохранён.`
+                    : "Врач сохранён. История пациентов пуста. Каталог сохранён.",
+            );
+            return result;
+        }
+
+        if (typeof window.eel.save_doctor_name !== "function") {
+            setStatus("Имя врача обновлено локально.");
+            return { ok: true, local: true };
+        }
+        result = await window.eel.save_doctor_name(trimmedName)();
         setStatus(trimmedName ? "Врач сохранен." : "Имя врача очищено.");
+        return result;
     } catch (error) {
         console.error(error);
         setStatus("Не удалось сохранить врача.");
+        return { ok: false };
+    }
+}
+
+function openDoctorModal({ title = "Сменить врача", showNote = true } = {}) {
+    const titleEl = document.getElementById("doctorModalTitle");
+    const noteEl = document.getElementById("doctorModalNote");
+    if (titleEl) {
+        titleEl.textContent = title;
+    }
+    if (noteEl) {
+        noteEl.hidden = !showNote;
+    }
+    doctorModalInput.value = settingsDoctorInput.value || recipeDoctorInput.value || "";
+    if (doctorModalInstance) {
+        doctorModalInstance.show();
+    }
+}
+
+async function clearPatientDataFromBackend() {
+    if (!window.confirm(
+        "Очистить историю пациентов?\n\nКаталог препаратов, шаблоны и схемы сохранятся.",
+    )) {
+        return false;
+    }
+    try {
+        if (window.eel && typeof window.eel.clear_patient_data === "function") {
+            const result = await window.eel.clear_patient_data()();
+            await clearCurrentPatientFields();
+            clearDrugRows();
+            await saveAutosaveState();
+            const deleted = result?.history_deleted || 0;
+            setStatus(
+                deleted
+                    ? `История пациентов очищена (${deleted}). Каталог сохранён.`
+                    : "История пациентов уже была пуста. Каталог сохранён.",
+            );
+            return true;
+        }
+        await clearCurrentPatientFields();
+        setStatus("История пациентов очищена локально.");
+        return true;
+    } catch (error) {
+        console.error(error);
+        setStatus("Не удалось очистить историю пациентов.");
+        return false;
     }
 }
 
 function bindDoctorControls() {
     const saveDoctor = async () => {
-        await saveDoctorNameToBackend(settingsDoctorInput.value || doctorModalInput.value || recipeDoctorInput.value);
+        await saveDoctorNameToBackend(
+            settingsDoctorInput.value || doctorModalInput.value || recipeDoctorInput.value,
+            { clearPatientsOnChange: true },
+        );
     };
 
     settingsDoctorInput.addEventListener("change", async () => {
         await saveDoctor();
     });
     saveDoctorBtn.addEventListener("click", async () => {
-        await saveDoctorNameToBackend(doctorModalInput.value);
+        const result = await saveDoctorNameToBackend(doctorModalInput.value, { clearPatientsOnChange: true });
+        if (result?.cancelled) {
+            return;
+        }
         if (doctorModalInstance) {
             doctorModalInstance.hide();
         }
     });
     changeDoctorBtn.addEventListener("click", () => {
-        doctorModalInput.value = settingsDoctorInput.value || recipeDoctorInput.value || "";
-        if (doctorModalInstance) {
-            doctorModalInstance.show();
-        }
+        openDoctorModal({ title: "Сменить врача", showNote: true });
     });
+
+    const clearPatientDataBtn = document.getElementById("clearPatientDataBtn");
+    if (clearPatientDataBtn && !clearPatientDataBtn.dataset.bound) {
+        clearPatientDataBtn.addEventListener("click", async () => {
+            await clearPatientDataFromBackend();
+        });
+        clearPatientDataBtn.dataset.bound = "true";
+    }
 }
 
 async function loadCatalogFromBackend() {
@@ -1675,7 +1777,7 @@ async function loadSettingsFromBackend() {
         syncDoctorInputs(doctorName);
 
         if (!doctorName && doctorModalInstance) {
-            window.setTimeout(() => doctorModalInstance.show(), 500);
+            window.setTimeout(() => openDoctorModal({ title: "Первый запуск", showNote: false }), 500);
         }
     } catch (error) {
         console.error(error);

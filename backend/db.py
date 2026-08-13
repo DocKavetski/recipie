@@ -219,6 +219,19 @@ class DrugRepository:
             row = cursor.fetchone()
             return json.loads(row["payload_json"]) if row else None
 
+    def count_history_entries(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute("SELECT COUNT(*) AS cnt FROM history").fetchone()
+            return int(row["cnt"] if row else 0)
+
+    def clear_patient_history(self) -> dict[str, Any]:
+        """Удаляет только историю пациентов. Каталог препаратов и шаблоны сохраняются."""
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM history")
+            connection.commit()
+            deleted = int(cursor.rowcount or 0)
+        return {"ok": True, "deleted": deleted, "catalog_preserved": True}
+
     def save_template(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         template_name = name.strip()
         if not template_name:

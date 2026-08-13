@@ -333,7 +333,10 @@
                                 <input class="form-check-input" type="checkbox">
                                 <label class="form-check-label">Быстрая печать без диалога</label>
                             </div>
-                            <button class="btn btn-sm btn-outline-danger mt-3">Сбросить базу данных</button>
+                            <div class="stub-note mt-3">При смене врача история пациентов очищается, каталог препаратов сохраняется.</div>
+                            <button class="btn btn-sm btn-outline-danger mt-2" id="clearPatientDataBtn" type="button">
+                                Очистить историю пациентов
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -393,12 +396,13 @@
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content">
                 <div class="modal-header py-2">
-                    <h5 class="modal-title fs-6">Первый запуск</h5>
+                    <h5 class="modal-title fs-6" id="doctorModalTitle">Первый запуск</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <label class="form-label">ФИО врача</label>
                     <input class="form-control form-control-sm" id="doctorModalInput" type="text" placeholder="Введите ФИО врача">
+                    <div class="stub-note mt-2" id="doctorModalNote">При смене врача история пациентов будет очищена. Каталог препаратов останется.</div>
                 </div>
                 <div class="modal-footer py-2">
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Позже</button>
