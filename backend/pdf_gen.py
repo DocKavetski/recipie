@@ -115,11 +115,11 @@ def _draw_void_z(pdf: canvas.Canvas, x: float, y: float, w: float, h: float) -> 
     pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
     pdf.setLineCap(1)
     pdf.setLineJoin(1)
-    pdf.setLineWidth(0.85)
+    pdf.setLineWidth(0.42)
     pdf.line(left, top, right, top)
     pdf.line(right, top, left, bottom)
     pdf.line(left, bottom, right, bottom)
-    pdf.setLineWidth(0.7)
+    pdf.setLineWidth(0.35)
     pdf.line(left + 1.2 * mm, mid_y, right - 1.2 * mm, mid_y)
     pdf.restoreState()
 
