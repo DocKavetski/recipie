@@ -57,6 +57,8 @@ let autoUpdateStarted = false;
 const DUPLEX_BACK_SLOT = [1, 0, 3, 2];
 const PRINT_CUT_MARKS_HTML = `
       <div class="cut-marks" aria-hidden="true">
+        <span class="cut-line-v"></span>
+        <span class="cut-line-h"></span>
         <span class="tick tick-v tick-top"></span>
         <span class="tick tick-v tick-bottom"></span>
         <span class="tick tick-h tick-left"></span>
@@ -162,7 +164,7 @@ function buildPreviewDocumentHtml(sheets, printStyles, escapedPdfPath) {
             <div class="print-toolbar">
               <button type="button" class="print-action-btn print-action-btn-primary" id="doPrintBtn">Печать</button>
               <button type="button" class="print-action-btn print-action-btn-secondary" id="closePreviewBtn">Закрыть</button>
-              <span class="print-note">A4 · масштаб 100% · отступ 4 мм в макете · дуплекс по длинной стороне${escapedPdfPath ? ` · PDF: ${escapedPdfPath}` : ""}</span>
+              <span class="print-note">A4 · масштаб 100% · поля 6 мм по бокам / 5 мм сверху-снизу · линии разреза · дуплекс по длинной стороне${escapedPdfPath ? ` · PDF: ${escapedPdfPath}` : ""}</span>
             </div>
             <div class="print-hint">
               Нажмите синюю кнопку <strong>Печать</strong> (или Ctrl+P). В диалоге принтера выберите двустороннюю печать
@@ -2541,7 +2543,7 @@ async function bindFormActions() {
             setStatus(
                 "Откроется окно предпросмотра — нажмите «Печать» или Ctrl+P. "
                 + "Дуплекс: по длинной стороне, масштаб 100%. "
-                + "Поля принтера: «нет» или «по умолчанию» (4 мм уже в макете). "
+                + "Поля принтера: «нет» или «по умолчанию» (в макете уже 6 мм по бокам). "
                 + `PDF сохранён: ${result.pdf_path}.`
                 + warningText
             );

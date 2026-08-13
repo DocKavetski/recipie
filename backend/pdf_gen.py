@@ -14,10 +14,11 @@ from backend.print_layout import (
     A4_H,
     A4_W,
     CUT_CROSS,
-    CUT_INSET,
     CUT_TICK,
     FORM_H,
     FORM_W,
+    PAGE_MARGIN_X,
+    PAGE_MARGIN_Y,
     blank_origins,
     content_box,
 )
@@ -327,22 +328,28 @@ def _blank_origins() -> list[tuple[float, float]]:
 
 
 def _draw_cut_guides(pdf: canvas.Canvas) -> None:
-    """Короткие метки разреза на краях и маленький крестик в центре."""
-    pdf.setDash()
+    """Линии разреза между 4 бланками + короткие метки на краях."""
     pdf.setStrokeColorRGB(0.35, 0.35, 0.35)
-    pdf.setLineWidth(0.4)
+    pdf.setLineWidth(0.45)
 
     cx = A4_W / 2
     cy = A4_H / 2
 
-    # метки на краях листа (в поле)
-    inset = CUT_INSET
-    pdf.line(cx, A4_H - inset, cx, A4_H - inset - CUT_TICK)
-    pdf.line(cx, inset, cx, inset + CUT_TICK)
-    pdf.line(inset, cy, inset + CUT_TICK, cy)
-    pdf.line(A4_W - inset, cy, A4_W - inset - CUT_TICK, cy)
+    # Полные линии разреза по центру (между бланками), пунктир.
+    pdf.setDash(2.2, 1.6)
+    pdf.line(cx, PAGE_MARGIN_Y, cx, A4_H - PAGE_MARGIN_Y)
+    pdf.line(PAGE_MARGIN_X, cy, A4_W - PAGE_MARGIN_X, cy)
 
-    # маленький крестик в центре между бланками
+    # Короткие метки у края листа.
+    pdf.setDash()
+    inset_x = PAGE_MARGIN_X
+    inset_y = PAGE_MARGIN_Y
+    pdf.line(cx, A4_H - inset_y, cx, A4_H - inset_y - CUT_TICK)
+    pdf.line(cx, inset_y, cx, inset_y + CUT_TICK)
+    pdf.line(inset_x, cy, inset_x + CUT_TICK, cy)
+    pdf.line(A4_W - inset_x, cy, A4_W - inset_x - CUT_TICK, cy)
+
+    # Крестик в центре пересечения.
     half = CUT_CROSS / 2
     pdf.line(cx - half, cy, cx + half, cy)
     pdf.line(cx, cy - half, cx, cy + half)

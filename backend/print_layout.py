@@ -1,8 +1,8 @@
 """Общая геометрия печати формы 1 (PDF + HTML).
 
-На A4 — 4 бланка 2×2. Поле PAGE_MARGIN (~4 мм) со всех сторон листа, чтобы
-принтер не обрезал края (непечатаемая зона). Бланки чуть меньше норматива
-(101×144.5 мм вместо 105×148), зато всё помещается. Дуплекс L/R сохраняется.
+На A4 — 4 бланка 2×2. Боковые поля шире (6 мм), чтобы Kyocera и похожие
+принтеры не обрезали края; сверху/снизу 5 мм. Бланки чуть меньше норматива
+(99×143.5 мм вместо 105×148), зато всё помещается. Дуплекс L/R сохраняется.
 """
 
 from __future__ import annotations
@@ -11,17 +11,17 @@ from reportlab.lib.units import mm
 
 A4_W = 210 * mm
 A4_H = 297 * mm
-PAGE_MARGIN = 4 * mm
-PAGE_MARGIN_X = PAGE_MARGIN
-PAGE_MARGIN_Y = PAGE_MARGIN
+PAGE_MARGIN_X = 6 * mm
+PAGE_MARGIN_Y = 5 * mm
+PAGE_MARGIN = PAGE_MARGIN_X  # совместимость со старыми импортами
 GUTTER_X = 0
 GUTTER_Y = 0
-FORM_W = (A4_W - 2 * PAGE_MARGIN_X - GUTTER_X) / 2  # 101 mm
-FORM_H = (A4_H - 2 * PAGE_MARGIN_Y - GUTTER_Y) / 2  # 144.5 mm
+FORM_W = (A4_W - 2 * PAGE_MARGIN_X - GUTTER_X) / 2  # 99 mm
+FORM_H = (A4_H - 2 * PAGE_MARGIN_Y - GUTTER_Y) / 2  # 143.5 mm
 PAD = 1.8 * mm
-CUT_TICK = 4 * mm
-CUT_CROSS = 5 * mm
-CUT_INSET = 4 * mm
+CUT_TICK = 5 * mm
+CUT_CROSS = 6 * mm
+CUT_INSET = PAGE_MARGIN_X
 
 
 def blank_origins() -> list[tuple[float, float]]:

@@ -1,16 +1,19 @@
 /* Бланк формы 1 — 4 на A4. Геометрия = backend/print_layout.py
-   Поле 4 мм от края листа (необрезаемая зона принтера), бланк 101×144.5 мм. */
+   Боковые поля 6 мм, сверху/снизу 5 мм (Kyocera и др.), бланк 99×143.5 мм. */
 
 :root {
   --ink: #111;
   --grid: #222;
   --paper: #fff;
-  --page-margin: 4mm;
-  --form-w: 101mm;
-  --form-h: 144.5mm;
+  --page-margin-x: 6mm;
+  --page-margin-y: 5mm;
+  --page-margin: var(--page-margin-x);
+  --form-w: 99mm;
+  --form-h: 143.5mm;
   --blank-pad: 1.8mm;
-  --cut: #666;
-  --cut-inset: 4mm;
+  --cut: #555;
+  --cut-inset-x: 6mm;
+  --cut-inset-y: 5mm;
 }
 
 * { box-sizing: border-box; }
@@ -81,7 +84,7 @@ body {
   width: 210mm;
   height: 297mm;
   margin: 10px auto;
-  padding: var(--page-margin);
+  padding: var(--page-margin-y) var(--page-margin-x);
   background: #fff;
   page-break-after: always;
   overflow: visible;
@@ -93,8 +96,8 @@ body {
   display: grid;
   grid-template-columns: var(--form-w) var(--form-w);
   grid-template-rows: var(--form-h) var(--form-h);
-  width: calc(210mm - 2 * var(--page-margin));
-  height: calc(297mm - 2 * var(--page-margin));
+  width: calc(210mm - 2 * var(--page-margin-x));
+  height: calc(297mm - 2 * var(--page-margin-y));
   gap: 0;
 }
 
@@ -129,29 +132,54 @@ body {
   z-index: 5;
 }
 
+.cut-marks .cut-line-v,
+.cut-marks .cut-line-h {
+  position: absolute;
+  background: transparent;
+  border: 0;
+}
+
+.cut-marks .cut-line-v {
+  left: 50%;
+  top: var(--cut-inset-y);
+  bottom: var(--cut-inset-y);
+  width: 0;
+  border-left: 0.3mm dashed var(--cut);
+  transform: translateX(-50%);
+}
+
+.cut-marks .cut-line-h {
+  top: 50%;
+  left: var(--cut-inset-x);
+  right: var(--cut-inset-x);
+  height: 0;
+  border-top: 0.3mm dashed var(--cut);
+  transform: translateY(-50%);
+}
+
 .cut-marks .tick {
   position: absolute;
   background: var(--cut);
 }
 
 .cut-marks .tick-v {
-  width: 0.25mm;
-  height: 4mm;
+  width: 0.3mm;
+  height: 5mm;
   left: 50%;
   transform: translateX(-50%);
 }
 
 .cut-marks .tick-h {
-  height: 0.25mm;
-  width: 4mm;
+  height: 0.3mm;
+  width: 5mm;
   top: 50%;
   transform: translateY(-50%);
 }
 
-.cut-marks .tick-top { top: var(--cut-inset); }
-.cut-marks .tick-bottom { bottom: var(--cut-inset); }
-.cut-marks .tick-left { left: var(--cut-inset); }
-.cut-marks .tick-right { right: var(--cut-inset); }
+.cut-marks .tick-top { top: var(--cut-inset-y); }
+.cut-marks .tick-bottom { bottom: var(--cut-inset-y); }
+.cut-marks .tick-left { left: var(--cut-inset-x); }
+.cut-marks .tick-right { right: var(--cut-inset-x); }
 
 .cut-marks .cross-h,
 .cut-marks .cross-v {
@@ -162,14 +190,14 @@ body {
 }
 
 .cut-marks .cross-h {
-  width: 5mm;
-  height: 0.25mm;
+  width: 6mm;
+  height: 0.3mm;
   transform: translate(-50%, -50%);
 }
 
 .cut-marks .cross-v {
-  width: 0.25mm;
-  height: 5mm;
+  width: 0.3mm;
+  height: 6mm;
   transform: translate(-50%, -50%);
 }
 
@@ -258,12 +286,12 @@ table.form tr:last-child td {
 .front col.c2 { width: 32.90%; }
 .front col.c3 { width: 50.55%; }
 
-.front .h-r0 { height: 25mm; }
-.front .h-r1 { height: 13.5mm; }
-.front .h-r2 { height: 15.5mm; }
-.front .h-r3 { height: 21mm; }
-.front .h-r4 { height: 23mm; }
-.front .h-r5 { height: 23mm; }
+.front .h-r0 { height: 24mm; }
+.front .h-r1 { height: 13mm; }
+.front .h-r2 { height: 15mm; }
+.front .h-r3 { height: 20.5mm; }
+.front .h-r4 { height: 22.5mm; }
+.front .h-r5 { height: 22.5mm; }
 
 .back { font-size: 8px; }
 .back col.b1 { width: 30.04%; }
@@ -305,7 +333,7 @@ table.form tr:last-child td {
 
 @page {
   size: 210mm 297mm;
-  margin: 4mm;
+  margin: 5mm 6mm;
 }
 
 @media print {
@@ -322,7 +350,7 @@ table.form tr:last-child td {
     overflow: visible;
   }
   .a4-grid {
-    width: calc(210mm - 8mm);
-    height: calc(297mm - 8mm);
+    width: calc(210mm - 12mm);
+    height: calc(297mm - 10mm);
   }
 }
