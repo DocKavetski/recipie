@@ -79,6 +79,46 @@ def useful_count(payload: dict[str, Any] | None) -> int:
     return sum(1 for row in rows if str(row.get("status") or "") in {"good", "low", "none"})
 
 
+def cache_covers_drugs(payload: dict[str, Any] | None, drugs: list[dict[str, Any]]) -> bool:
+    """Кэш полный только если покрывает почти весь текущий список (не «первые 20»)."""
+    if not has_useful_rows(payload):
+        return False
+    expected = [
+        drug for drug in drugs
+        if str(drug.get("russian_name") or drug.get("mnn") or "").strip()
+    ]
+    if not expected:
+        return True
+    rows = (payload or {}).get("rows") or []
+    hit = 0
+    for drug in expected:
+        if lookup_cached(payload, drug.get("mnn"), drug.get("russian_name"), drug.get("trade_names") or []):
+            hit += 1
+    # Старый кэш на 20 из 39+ не считаем достаточным.
+    return hit >= max(1, int(len(expected) * 0.9)) and len(rows) >= max(1, int(len(expected) * 0.9))
+
+
+def collect_availability_drugs(catalog: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Каталог + архив: архивные тоже проверяем — препарат может снова появиться."""
+    from backend.seed_loader import load_archived_drugs
+
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for drug in list(catalog or []) + list(load_archived_drugs() or []):
+        if not isinstance(drug, dict):
+            continue
+        mnn = str(drug.get("mnn") or "").strip().lower()
+        if not mnn or mnn in seen:
+            continue
+        if not str(drug.get("russian_name") or drug.get("mnn") or "").strip():
+            continue
+        seen.add(mnn)
+        item = dict(drug)
+        item["archived"] = bool(drug.get("archived"))
+        merged.append(item)
+    return merged
+
+
 def _row_keys(drug: dict[str, Any]) -> list[str]:
     keys = [
         _normalize(drug.get("mnn")),
@@ -146,6 +186,7 @@ def build_daily_cache(
                 "label": result.get("label") or "Нет данных",
                 "pharmacies_minsk": result.get("pharmacies_minsk") or 0,
                 "message": result.get("message") or "",
+                "archived": bool(drug.get("archived")),
             }
             rows.append(row)
             for key in _row_keys(drug):
@@ -166,8 +207,15 @@ def build_daily_cache(
             session.close()
 
     useful = useful_count({"rows": rows})
+    archived_back = sum(
+        1
+        for row in rows
+        if row.get("archived") and str(row.get("status") or "") in {"good", "low"}
+    )
     if useful:
         message = f"Наличие на {today_key()}: {useful} из {len(rows)} препаратов."
+        if archived_back:
+            message += f" В архиве снова есть: {archived_back}."
     elif rows:
         message = (
             f"tabletka.by не вернул наличие ({len(rows)} запросов без данных). "
@@ -283,7 +331,7 @@ class DailyAvailabilityStore:
         with self._lock:
             self._recover_dead_worker()
 
-            if not force and is_fresh(self._cache) and has_useful_rows(self._cache):
+            if not force and is_fresh(self._cache) and cache_covers_drugs(self._cache, drugs):
                 return self.snapshot()
             if self._checking:
                 if force:
@@ -294,9 +342,14 @@ class DailyAvailabilityStore:
             self._pending_force = None
             self._progress = {"done": 0, "total": len(drugs)}
             if force:
-                self._cache["message"] = "Принудительная проверка tabletka.by…"
+                self._cache["message"] = f"Принудительная проверка tabletka.by ({len(drugs)} препаратов)…"
+            elif is_fresh(self._cache) and has_useful_rows(self._cache) and not cache_covers_drugs(self._cache, drugs):
+                self._cache["message"] = (
+                    f"В кэше только {len(self._cache.get('rows') or [])} препаратов — "
+                    f"допроверяю все {len(drugs)}…"
+                )
             else:
-                self._cache["message"] = "Проверяю наличие на сегодня…"
+                self._cache["message"] = f"Проверяю наличие на сегодня ({len(drugs)} препаратов)…"
 
         # Вне замка: короткий синхронный пробный запрос, затем фон.
         self._probe_first(list(drugs))

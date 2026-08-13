@@ -46,6 +46,7 @@ const restartAppBtn = document.getElementById("restartAppBtn");
 const openRepoBtn = document.getElementById("openRepoBtn");
 
 let catalogDrugs = [...fallbackCatalog];
+let archivedDrugsList = [];
 let doctorModalInstance = null;
 let autosaveTimer = null;
 let searchMatches = [];
@@ -1260,13 +1261,32 @@ function renderDirectoryArchive(drugs) {
     if (!directoryArchiveBody) {
         return;
     }
+    if (Array.isArray(drugs)) {
+        archivedDrugsList = drugs;
+    }
     directoryArchiveBody.innerHTML = "";
-    const rows = Array.isArray(drugs) ? drugs : [];
+    const rows = archivedDrugsList;
     if (!rows.length) {
-        directoryArchiveBody.innerHTML = `<tr><td colspan="8" class="text-muted">Архив пуст</td></tr>`;
+        directoryArchiveBody.innerHTML = `<tr><td colspan="9" class="text-muted">Архив пуст</td></tr>`;
         return;
     }
     for (const drug of rows) {
+        const availability = directoryAvailabilityForDrug(drug);
+        let availabilityCell;
+        if (availability) {
+            const meta = availabilityMeta(availability.status);
+            const pharmacies = availability.pharmacies_minsk != null
+                ? ` · ${availability.pharmacies_minsk} апт.`
+                : "";
+            const backNote = ["good", "low"].includes(String(availability.status || ""))
+                ? ' <span class="status-badge status-good" title="Снова находится в продаже">снова есть</span>'
+                : "";
+            availabilityCell = `<td><span class="status-badge ${meta.className}" title="${escapeHtml(availability.message || "")}">${escapeHtml(availability.label || meta.label)}</span><span class="text-muted small">${escapeHtml(pharmacies)}</span>${backNote}</td>`;
+        } else if (dailyAvailability.checking) {
+            availabilityCell = `<td><span class="status-badge status-none">…</span></td>`;
+        } else {
+            availabilityCell = `<td><span class="status-badge status-none">—</span></td>`;
+        }
         const row = document.createElement("tr");
         row.className = "directory-archive-row";
         row.innerHTML = `
@@ -1277,6 +1297,7 @@ function renderDirectoryArchive(drugs) {
             <td>${escapeHtml((drug.form_options || [drug.drug_form]).join(", "))}</td>
             <td>${escapeHtml((drug.dosage_options || [drug.dosage]).join(", "))}</td>
             <td>${escapeHtml((drug.trade_names || []).join(", "))}</td>
+            ${availabilityCell}
             <td>${escapeHtml(drug.archive_reason || "Архив")}</td>
         `;
         directoryArchiveBody.appendChild(row);
@@ -1288,7 +1309,7 @@ async function loadArchivedDrugsFromBackend() {
         return;
     }
     if (!window.eel || typeof window.eel.get_archived_drugs !== "function") {
-        directoryArchiveBody.innerHTML = `<tr><td colspan="8" class="text-muted">Архив недоступен в этой версии backend</td></tr>`;
+        directoryArchiveBody.innerHTML = `<tr><td colspan="9" class="text-muted">Архив недоступен в этой версии backend</td></tr>`;
         return;
     }
     try {
@@ -1296,7 +1317,7 @@ async function loadArchivedDrugsFromBackend() {
         renderDirectoryArchive(archived);
     } catch (error) {
         console.error(error);
-        directoryArchiveBody.innerHTML = `<tr><td colspan="8" class="text-muted">Не удалось загрузить архив</td></tr>`;
+        directoryArchiveBody.innerHTML = `<tr><td colspan="9" class="text-muted">Не удалось загрузить архив</td></tr>`;
     }
 }
 
@@ -1657,11 +1678,12 @@ async function loadDailyAvailability({ start = false, force = false } = {}) {
         if (start && typeof window.eel.ensure_daily_availability === "function") {
             payload = await window.eel.ensure_daily_availability(Boolean(force))();
         } else if (start && typeof window.eel.refresh_catalog_availability === "function") {
-            payload = await window.eel.refresh_catalog_availability(0, Boolean(force))();
+            // Большой limit — на случай старого exe, где список ещё резали до 20.
+            payload = await window.eel.refresh_catalog_availability(1000, Boolean(force))();
         } else if (typeof window.eel.get_daily_availability === "function") {
             payload = await window.eel.get_daily_availability()();
         } else if (typeof window.eel.refresh_catalog_availability === "function") {
-            payload = await window.eel.refresh_catalog_availability()();
+            payload = await window.eel.refresh_catalog_availability(1000)();
         }
         if (payload) {
             indexDailyAvailability(payload);
@@ -1672,6 +1694,9 @@ async function loadDailyAvailability({ start = false, force = false } = {}) {
     }
     applyCachedAvailabilityToAllRows();
     renderDirectoryTable();
+    if (archivedDrugsList.length) {
+        renderDirectoryArchive();
+    }
     return dailyAvailability;
 }
 
@@ -1732,6 +1757,9 @@ async function forceCheckDailyAvailability() {
             }
         }
         renderDirectoryTable();
+        if (archivedDrugsList.length) {
+            renderDirectoryArchive();
+        }
         if (dailyAvailability.useful) {
             setStatus(dailyAvailability.message || `Наличие обновлено: ${dailyAvailability.rows.length} препаратов.`);
         } else if (dailyAvailability.checking) {
