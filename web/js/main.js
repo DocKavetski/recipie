@@ -2381,35 +2381,55 @@ function bindManualDrugControls() {
 
     if (saveManualDrugBtn && !saveManualDrugBtn.dataset.bound) {
         saveManualDrugBtn.addEventListener("click", async () => {
-            const payload = {
-                russian_name: document.getElementById("manualDrugRussian")?.value.trim() || "",
-                mnn: document.getElementById("manualDrugMnn")?.value.trim() || "",
-                latin_name: document.getElementById("manualDrugLatin")?.value.trim() || "",
-                drug_form: document.getElementById("manualDrugForm")?.value || "Tab.",
-                dosage: document.getElementById("manualDrugDosage")?.value.trim() || "",
-                packaging: document.getElementById("manualDrugPackaging")?.value.trim() || "N30",
-                trade_names_raw: document.getElementById("manualDrugTrade")?.value.trim() || "",
-                category: document.getElementById("manualDrugCategory")?.value.trim() || "Прочее",
-            };
-            if (!payload.russian_name || !payload.mnn) {
-                setStatus("Укажите русское название и МНН.");
+            const queryInput = document.getElementById("manualDrugQuery");
+            const hint = document.getElementById("manualDrugHint");
+            const query = String(queryInput?.value || "").trim();
+            if (query.length < 3) {
+                setStatus("Введите МНН (минимум 3 символа).");
                 return;
             }
+            if (!window.eel || typeof window.eel.add_drug_from_tabletka !== "function") {
+                setStatus("Backend недоступен.");
+                return;
+            }
+            saveManualDrugBtn.disabled = true;
+            if (hint) {
+                hint.textContent = `Ищу «${query}» на tabletka.by…`;
+            }
+            setStatus(`Ищу «${query}» на tabletka.by…`);
             try {
-                await window.eel.upsert_custom_drug(payload)();
+                const result = await window.eel.add_drug_from_tabletka(query)();
                 await loadCatalogFromBackend();
                 renderDirectoryTable();
-                setStatus(`Препарат «${payload.russian_name}» сохранён в каталог.`);
-                document.getElementById("manualDrugRussian").value = "";
-                document.getElementById("manualDrugMnn").value = "";
-                document.getElementById("manualDrugLatin").value = "";
-                document.getElementById("manualDrugDosage").value = "";
-                document.getElementById("manualDrugTrade").value = "";
+                if (queryInput) {
+                    queryInput.value = "";
+                }
+                const message = result?.message || `Препарат «${result?.russian_name || query}» добавлен.`;
+                setStatus(message);
+                if (hint) {
+                    hint.textContent = message;
+                }
             } catch (error) {
                 console.error(error);
-                setStatus(String(error?.message || error || "Не удалось сохранить препарат."));
+                const text = String(error?.message || error || "Не удалось добавить препарат.");
+                setStatus(text);
+                if (hint) {
+                    hint.textContent = text;
+                }
+            } finally {
+                saveManualDrugBtn.disabled = false;
             }
         });
+        const queryInput = document.getElementById("manualDrugQuery");
+        if (queryInput && !queryInput.dataset.bound) {
+            queryInput.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    saveManualDrugBtn.click();
+                }
+            });
+            queryInput.dataset.bound = "true";
+        }
         saveManualDrugBtn.dataset.bound = "true";
     }
 

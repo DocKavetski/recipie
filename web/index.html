@@ -236,50 +236,26 @@
                     </div>
 
                     <div class="manual-drug-form mb-3">
-                        <div class="panel-title mb-1">Добавить препарат в каталог</div>
-                        <div class="stub-note mb-2">Ручные препараты сохраняются локально и не удаляются при обновлении каталога.</div>
+                        <div class="panel-title mb-1">Добавить препарат по МНН</div>
+                        <div class="stub-note mb-2">Укажите МНН — формы, дозы, фасовки и торговые названия подтянутся с tabletka.by.</div>
                         <div class="row g-2 align-items-end">
-                            <div class="col-6 col-md-3">
-                                <label class="form-label mb-1" for="manualDrugRussian">Русское название</label>
-                                <input class="form-control form-control-sm" id="manualDrugRussian" type="text" placeholder="Сертралин">
+                            <div class="col-12 col-md-8">
+                                <label class="form-label mb-1" for="manualDrugQuery">МНН</label>
+                                <input
+                                    class="form-control form-control-sm"
+                                    id="manualDrugQuery"
+                                    type="text"
+                                    placeholder="Например: Сертралин или Sertraline"
+                                    autocomplete="off"
+                                >
                             </div>
-                            <div class="col-6 col-md-2">
-                                <label class="form-label mb-1" for="manualDrugMnn">МНН (латиница)</label>
-                                <input class="form-control form-control-sm" id="manualDrugMnn" type="text" placeholder="Sertraline">
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="form-label mb-1" for="manualDrugLatin">Лат. название</label>
-                                <input class="form-control form-control-sm" id="manualDrugLatin" type="text" placeholder="Sertralinum">
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="form-label mb-1" for="manualDrugForm">Форма</label>
-                                <select class="form-select form-select-sm" id="manualDrugForm">
-                                    <option value="Tab.">Tab.</option>
-                                    <option value="Caps.">Caps.</option>
-                                    <option value="Sol.">Sol.</option>
-                                    <option value="Gtt.">Gtt.</option>
-                                </select>
-                            </div>
-                            <div class="col-6 col-md-1">
-                                <label class="form-label mb-1" for="manualDrugDosage">Доза</label>
-                                <input class="form-control form-control-sm" id="manualDrugDosage" type="text" placeholder="50 мг">
-                            </div>
-                            <div class="col-6 col-md-1">
-                                <label class="form-label mb-1" for="manualDrugPackaging">Фасовка</label>
-                                <input class="form-control form-control-sm" id="manualDrugPackaging" type="text" placeholder="N30" value="N30">
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="form-label mb-1" for="manualDrugTrade">Торговые (через ;)</label>
-                                <input class="form-control form-control-sm" id="manualDrugTrade" type="text" placeholder="Стимулотон">
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="form-label mb-1" for="manualDrugCategory">Категория</label>
-                                <input class="form-control form-control-sm" id="manualDrugCategory" type="text" placeholder="Прочее" value="Прочее">
-                            </div>
-                            <div class="col-12 col-md-2">
-                                <button class="btn btn-sm btn-primary w-100" id="saveManualDrugBtn" type="button">Сохранить в каталог</button>
+                            <div class="col-12 col-md-4">
+                                <button class="btn btn-sm btn-primary w-100" id="saveManualDrugBtn" type="button">
+                                    Найти на tabletka.by и сохранить
+                                </button>
                             </div>
                         </div>
+                        <div class="text-muted small mt-2" id="manualDrugHint">Один запрос — препарат появится в каталоге и поиске рецепта.</div>
                     </div>
 
                     <div class="table-responsive">

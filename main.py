@@ -17,6 +17,7 @@ _bootstrap_frozen_overrides()
 
 import eel
 
+from backend.custom_drug_add import add_custom_drug_from_tabletka
 from backend.db import DrugRepository
 from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
 from backend.doctor_change import change_doctor as change_doctor_service
@@ -242,6 +243,12 @@ def delete_template(name):
 @eel.expose
 def upsert_custom_drug(payload):
     return REPOSITORY.upsert_custom_drug(payload or {})
+
+
+@eel.expose
+def add_drug_from_tabletka(query):
+    """Добавить препарат в каталог по МНН: данные форм/доз/торговых с tabletka.by."""
+    return add_custom_drug_from_tabletka(REPOSITORY, query or "")
 
 
 @eel.expose
