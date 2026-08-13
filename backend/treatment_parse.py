@@ -344,7 +344,10 @@ def drug_payload_from_match(
         "match_kind": entry.kind,
     }
     if dispense_qty is not None:
-        payload["dispenseQty"] = dispense_qty
+        from backend.dispense_rules import ceil_to_dispense_step
+
+        # № из дневника/схемы увеличиваем до кратности фасовки (10 или 14).
+        payload["dispenseQty"] = ceil_to_dispense_step(dispense_qty, packaging)
     return payload
 
 

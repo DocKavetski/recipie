@@ -91,15 +91,21 @@ function mergeDrugWithCatalog(drug) {
 }
 
 function drugRowOptionsFromState(drug) {
-    return {
+    const rawQty = drug.dispenseQty ?? drug.dispense_qty;
+    const hasQty = rawQty !== undefined && rawQty !== null && String(rawQty).trim() !== "";
+    const options = {
         mode: drug.mode || (drug.selectedTrade ? "trade" : "mnn"),
         selectedTrade: drug.selectedTrade || "",
         drug_form: drug.drug_form,
         dosage: drug.dosage,
-        dispenseQty: drug.dispenseQty || drug.dispense_qty || 1,
         selectedScheme: drug.selectedScheme || "",
         availability: "unknown",
     };
+    // Не подставляем 1: иначе после разбора схемы без № ломается фасовка и шаг 10/14.
+    if (hasQty) {
+        options.dispenseQty = rawQty;
+    }
+    return options;
 }
 
 function restoreDrugsToContainer(drugs, container, options = {}) {

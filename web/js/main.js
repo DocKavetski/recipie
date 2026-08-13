@@ -1271,8 +1271,22 @@ function populateRow(row, drug, options = {}) {
         // Не перетираем № из разбора дневника (например №90) фасовкой торгового.
         row.querySelector(".drug-packaging-input").value = selectedDetails.packaging || row.querySelector(".drug-packaging-input").value;
         row.querySelector(".drug-dispense-input").value = selectedDetails.dispense_qty || extractDefaultDispenseQty(selectedDetails.packaging);
+        syncDispenseConstraints(row);
+    } else if (hasExplicitDispense) {
+        // № из распознанной схемы: увеличить до кратности 10 или 14 по фасовке.
+        const packaging = row.querySelector(".drug-packaging-input").value;
+        row.querySelector(".drug-dispense-input").value = ceilToDispenseStep(
+            row.querySelector(".drug-dispense-input").value,
+            packaging,
+        );
+        syncDispenseConstraints(row, { normalizeValue: false });
+        const dispenseInput = row.querySelector(".drug-dispense-input");
+        if (dispenseInput) {
+            dispenseInput.dataset.dispenseStep = String(dispenseStepByPackaging(packaging));
+        }
+    } else {
+        syncDispenseConstraints(row);
     }
-    syncDispenseConstraints(row);
 }
 
 function hideSearchDropdown() {

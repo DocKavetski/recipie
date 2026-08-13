@@ -191,12 +191,23 @@ def test_duplicate_mnn_lines_are_preserved(tmp_path: Path):
 def test_trade_packaging_not_overwritten_by_dispense_qty(tmp_path: Path):
     catalog = _catalog(tmp_path)
     # У «Венлаксор» в каталоге фасовка N30, но в тексте стоит D.t.d. (№28).
-    # D.t.d. нельзя использовать как фасовку.
+    # D.t.d. нельзя использовать как фасовку; № увеличиваем до кратности фасовки.
     text = "Венлаксор 75 мг по 1 т утром (№28)"
     result = parse_treatment_text(text, catalog)
     assert result["ok"] is True
     assert len(result["drugs"]) == 1
     drug = result["drugs"][0]
     assert drug["selectedTrade"] == "Венлаксор"
-    assert drug["dispenseQty"] == 28
     assert drug["packaging"] == "N30"
+    assert drug["dispenseQty"] == 30
+
+
+def test_parsed_qty_ceils_to_pack_step_of_14(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    # Стимулотон 100 мг → фасовка N28, шаг 14. №90 → 98.
+    text = "Стимулотон 100 мг по 1 таб. утром (№90)"
+    result = parse_treatment_text(text, catalog)
+    assert result["ok"] is True
+    drug = result["drugs"][0]
+    assert drug["packaging"] == "N28"
+    assert drug["dispenseQty"] == 98

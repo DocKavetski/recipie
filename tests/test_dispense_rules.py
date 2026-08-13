@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from backend.dispense_rules import (
+    ceil_to_dispense_step,
     dispense_step_by_packaging,
     is_valid_dispense_qty,
     nearest_multiple,
@@ -15,6 +16,8 @@ def test_dispense_step_by_packaging():
     assert dispense_step_by_packaging("N50") == 10
     assert dispense_step_by_packaging("N14") == 14
     assert dispense_step_by_packaging("N7") == 1
+    assert dispense_step_by_packaging("") == 1
+    assert dispense_step_by_packaging(None) == 1
 
 
 def test_nearest_multiple():
@@ -22,6 +25,14 @@ def test_nearest_multiple():
     assert nearest_multiple(56, 14) == 56
     assert nearest_multiple(50, 14) == 56
     assert nearest_multiple(0, 14) == 14
+
+
+def test_ceil_to_dispense_step():
+    assert ceil_to_dispense_step(90, "N30") == 90
+    assert ceil_to_dispense_step(91, "N30") == 100
+    assert ceil_to_dispense_step(90, "N28") == 98
+    assert ceil_to_dispense_step(28, "N28") == 28
+    assert ceil_to_dispense_step(1, "N28") == 14
 
 
 def test_is_valid_dispense_qty():

@@ -2,6 +2,9 @@
 
 function dispenseStepByPackaging(packaging) {
     const packQty = extractDefaultDispenseQty(packaging);
+    if (!Number.isFinite(packQty) || packQty < 2) {
+        return 1;
+    }
     if (packQty % 14 === 0) {
         return 14;
     }
@@ -9,6 +12,18 @@ function dispenseStepByPackaging(packaging) {
         return 10;
     }
     return 1;
+}
+
+function ceilToDispenseStep(value, packaging) {
+    const numeric = Number.parseInt(String(value || "").trim(), 10);
+    const step = dispenseStepByPackaging(packaging);
+    if (!Number.isFinite(numeric) || numeric < 1) {
+        return step > 1 ? step : 1;
+    }
+    if (step <= 1) {
+        return numeric;
+    }
+    return Math.max(step, Math.ceil(numeric / step) * step);
 }
 
 function nearestMultiple(value, step) {
