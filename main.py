@@ -17,7 +17,7 @@ _bootstrap_frozen_overrides()
 
 import eel
 
-from backend.availability_cache import DailyAvailabilityStore
+from backend.availability_cache import shared_store
 from backend.custom_drug_add import add_custom_drug_from_tabletka
 from backend.db import DrugRepository
 from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
@@ -52,7 +52,7 @@ def writable_path(*parts: str) -> Path:
 
 REPOSITORY = DrugRepository(writable_path("data") / "app.db")
 SETTINGS = SettingsStore(writable_path("data") / "settings.json")
-AVAILABILITY = DailyAvailabilityStore(writable_path("data"))
+AVAILABILITY = shared_store(writable_path("data"))
 
 
 def setup_logging() -> None:
@@ -280,7 +280,7 @@ def get_daily_availability():
 
 @eel.expose
 def ensure_daily_availability(force=False):
-    """Один опрос tabletka.by в сутки — при первом запуске дня."""
+    """Опрос tabletka.by; force=True — принудительно, даже если кэш на сегодня есть."""
     return AVAILABILITY.ensure_today(REPOSITORY.list_drugs(), force=bool(force))
 
 
@@ -306,15 +306,18 @@ def check_drug_availability(query, aliases=None):
 
 
 @eel.expose
-def refresh_catalog_availability(limit=20):
-    """Возвращает дневной кэш; limit оставлен для совместимости."""
+def refresh_catalog_availability(limit=20, force=False):
+    """Возвращает дневной кэш; force запускает повторный опрос."""
     _ = limit
-    snapshot = AVAILABILITY.snapshot()
-    if not snapshot.get("checking") and (
-        not snapshot.get("fresh")
-        or not any(str(row.get("status") or "") in {"good", "low", "none"} for row in (snapshot.get("rows") or []))
-    ):
-        snapshot = AVAILABILITY.ensure_today(REPOSITORY.list_drugs())
+    if force:
+        snapshot = AVAILABILITY.ensure_today(REPOSITORY.list_drugs(), force=True)
+    else:
+        snapshot = AVAILABILITY.snapshot()
+        if not snapshot.get("checking") and (
+            not snapshot.get("fresh")
+            or not any(str(row.get("status") or "") in {"good", "low", "none"} for row in (snapshot.get("rows") or []))
+        ):
+            snapshot = AVAILABILITY.ensure_today(REPOSITORY.list_drugs())
     return {
         "ok": True,
         "city": "Минск",
@@ -322,6 +325,7 @@ def refresh_catalog_availability(limit=20):
         "fresh": snapshot.get("fresh"),
         "checking": snapshot.get("checking"),
         "rows": snapshot.get("rows") or [],
+        "by_key": snapshot.get("by_key") or {},
         "message": snapshot.get("message"),
     }
 

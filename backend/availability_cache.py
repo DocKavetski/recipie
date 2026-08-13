@@ -167,8 +167,17 @@ class DailyAvailabilityStore:
         with self._lock:
             return lookup_cached(self._cache, *names)
 
+    def _worker_alive(self) -> bool:
+        return bool(self._thread and self._thread.is_alive())
+
     def ensure_today(self, drugs: list[dict[str, Any]], *, force: bool = False) -> dict[str, Any]:
         with self._lock:
+            # Если прошлый поток умер, а флаг checking завис — сбрасываем.
+            if self._checking and not self._worker_alive():
+                LOGGER.warning("Availability worker dead with checking=True; resetting")
+                self._checking = False
+                self._pending_force = None
+
             if not force and is_fresh(self._cache) and has_useful_rows(self._cache):
                 return self.snapshot()
             if self._checking:
@@ -178,9 +187,11 @@ class DailyAvailabilityStore:
                 return self.snapshot()
             self._checking = True
             self._pending_force = None
+            if force:
+                self._cache["message"] = "Принудительная проверка tabletka.by…"
             self._thread = threading.Thread(
                 target=self._refresh,
-                args=(list(drugs), force),
+                args=(list(drugs), bool(force)),
                 daemon=True,
                 name="availability-daily",
             )
@@ -209,3 +220,16 @@ class DailyAvailabilityStore:
                 self._pending_force = None
             if pending is not None:
                 self.ensure_today(pending, force=True)
+
+
+_SHARED_STORE: DailyAvailabilityStore | None = None
+
+
+def shared_store(data_dir: Path | None = None, *, checker=check_availability_minsk) -> DailyAvailabilityStore:
+    """Один store на процесс — и для main.py, и для overlay exposes."""
+    global _SHARED_STORE
+    if _SHARED_STORE is None:
+        if data_dir is None:
+            raise RuntimeError("Daily availability store is not initialized.")
+        _SHARED_STORE = DailyAvailabilityStore(data_dir, checker=checker)
+    return _SHARED_STORE

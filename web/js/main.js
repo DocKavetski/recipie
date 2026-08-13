@@ -1145,7 +1145,44 @@ function findDrugsByQuery(query) {
     }).slice(0, 8);
 }
 
+function directoryAvailabilityForDrug(drug) {
+    const names = [
+        drug?.mnn,
+        drug?.russian_name,
+        drug?.latin_name,
+        ...(Array.isArray(drug?.trade_names) ? drug.trade_names : []),
+    ];
+    for (const name of names) {
+        const hit = dailyAvailability.byKey[availabilityKey(name)];
+        if (hit) {
+            return hit;
+        }
+    }
+    return null;
+}
+
+function updateDirectoryAvailabilityMeta() {
+    const meta = document.getElementById("directoryAvailabilityMeta");
+    if (!meta) {
+        return;
+    }
+    if (dailyAvailability.checking) {
+        meta.textContent = dailyAvailability.message || "Идёт проверка наличия на tabletka.by…";
+        return;
+    }
+    if (dailyAvailability.rows?.length) {
+        const date = dailyAvailability.date ? ` на ${dailyAvailability.date}` : "";
+        meta.textContent = dailyAvailability.message
+            || `Наличие${date}: ${dailyAvailability.rows.length} препаратов.`;
+        return;
+    }
+    meta.textContent = "Наличие ещё не проверялось — нажмите «Проверить наличие».";
+}
+
 function renderDirectoryTable() {
+    if (!directoryTableBody) {
+        return;
+    }
     directoryTableBody.innerHTML = "";
     for (const drug of catalogDrugs) {
         const row = document.createElement("tr");
@@ -1153,6 +1190,19 @@ function renderDirectoryTable() {
         const deleteCell = drug.is_custom
             ? `<td class="text-end"><button type="button" class="btn btn-sm btn-link text-danger px-1 delete-custom-drug-btn" data-mnn="${escapeHtml(drug.mnn)}" title="Удалить ручной препарат"><i class="fa-solid fa-xmark"></i></button></td>`
             : "<td></td>";
+        const availability = directoryAvailabilityForDrug(drug);
+        let availabilityCell;
+        if (availability) {
+            const meta = availabilityMeta(availability.status);
+            const pharmacies = availability.pharmacies_minsk != null
+                ? ` · ${availability.pharmacies_minsk} апт.`
+                : "";
+            availabilityCell = `<td><span class="status-badge ${meta.className}" title="${escapeHtml(availability.message || "")}">${escapeHtml(availability.label || meta.label)}</span><span class="text-muted small">${escapeHtml(pharmacies)}</span></td>`;
+        } else if (dailyAvailability.checking) {
+            availabilityCell = `<td><span class="status-badge status-none">…</span></td>`;
+        } else {
+            availabilityCell = `<td><span class="status-badge status-none">—</span></td>`;
+        }
         row.innerHTML = `
             <td>${escapeHtml(drug.category)}${customBadge}</td>
             <td>${escapeHtml(drug.mnn)}</td>
@@ -1162,10 +1212,12 @@ function renderDirectoryTable() {
             <td>${escapeHtml(asStringList(drug.dosage_options || [drug.dosage]).join(", "))}</td>
             <td>${escapeHtml(optionLabel(drug.packaging))}</td>
             <td>${escapeHtml(asStringList(drug.trade_names).join(", "))}</td>
+            ${availabilityCell}
             ${deleteCell}
         `;
         directoryTableBody.appendChild(row);
     }
+    updateDirectoryAvailabilityMeta();
 }
 
 function renderDirectoryArchive(drugs) {
@@ -1546,15 +1598,25 @@ async function loadDailyAvailability({ start = false, force = false } = {}) {
         return dailyAvailability;
     }
     try {
+        let payload = null;
         if (start && typeof window.eel.ensure_daily_availability === "function") {
-            indexDailyAvailability(await window.eel.ensure_daily_availability(force)());
+            payload = await window.eel.ensure_daily_availability(Boolean(force))();
+        } else if (start && typeof window.eel.refresh_catalog_availability === "function") {
+            payload = await window.eel.refresh_catalog_availability(0, Boolean(force))();
         } else if (typeof window.eel.get_daily_availability === "function") {
-            indexDailyAvailability(await window.eel.get_daily_availability()());
+            payload = await window.eel.get_daily_availability()();
+        } else if (typeof window.eel.refresh_catalog_availability === "function") {
+            payload = await window.eel.refresh_catalog_availability()();
+        }
+        if (payload) {
+            indexDailyAvailability(payload);
         }
     } catch (error) {
         console.warn("daily availability failed", error);
+        setStatus(`Ошибка проверки наличия: ${error?.message || error}`);
     }
     applyCachedAvailabilityToAllRows();
+    renderDirectoryTable();
     return dailyAvailability;
 }
 
@@ -1577,27 +1639,32 @@ async function forceCheckDailyAvailability() {
     const button = document.getElementById("forceAvailabilityBtn");
     if (button) {
         button.disabled = true;
+        button.innerHTML = '<i class="fa-solid fa-rotate fa-spin me-1"></i>Проверяю…';
     }
     setStatus("Принудительная проверка наличия на tabletka.by…");
-    const body = document.getElementById("availabilityTableBody");
-    if (body) {
-        body.innerHTML = "<tr><td colspan=\"4\">Идёт принудительная проверка tabletka.by…</td></tr>";
-    }
+    updateDirectoryAvailabilityMeta();
     try {
+        const hasApi = window.eel && (
+            typeof window.eel.ensure_daily_availability === "function"
+            || typeof window.eel.refresh_catalog_availability === "function"
+        );
+        if (!hasApi) {
+            setStatus("Backend не поддерживает проверку наличия. Обновите приложение и перезапустите.");
+            return;
+        }
         await loadDailyAvailability({ start: true, force: true });
-        await refreshAvailabilityTable();
         const started = Date.now();
         while (dailyAvailability.checking && Date.now() - started < 180000) {
             await new Promise((resolve) => window.setTimeout(resolve, 1500));
             await loadDailyAvailability();
-            await refreshAvailabilityTable();
         }
-        if (dailyAvailability.fresh) {
+        renderDirectoryTable();
+        if (dailyAvailability.rows?.length) {
             setStatus(dailyAvailability.message || `Наличие обновлено: ${dailyAvailability.rows.length} препаратов.`);
         } else if (dailyAvailability.checking) {
-            setStatus("Проверка ещё идёт в фоне — таблица обновится сама.");
+            setStatus("Проверка ещё идёт в фоне — статусы появятся в справочнике.");
         } else {
-            setStatus(dailyAvailability.message || "Проверка наличия завершилась без данных. Нажмите «Проверить сейчас» ещё раз.");
+            setStatus(dailyAvailability.message || "Проверка завершилась без данных. Нажмите «Проверить наличие» ещё раз.");
         }
     } catch (error) {
         console.error(error);
@@ -1605,34 +1672,10 @@ async function forceCheckDailyAvailability() {
     } finally {
         if (button) {
             button.disabled = false;
+            button.innerHTML = '<i class="fa-solid fa-rotate me-1"></i>Проверить наличие';
         }
+        updateDirectoryAvailabilityMeta();
     }
-}
-
-async function refreshAvailabilityTable() {
-    const body = document.getElementById("availabilityTableBody");
-    if (!body) {
-        return;
-    }
-    await loadDailyAvailability();
-    const rows = dailyAvailability.rows || [];
-    if (dailyAvailability.checking && !rows.length) {
-        body.innerHTML = "<tr><td colspan=\"4\">Идёт утренняя проверка tabletka.by…</td></tr>";
-        return;
-    }
-    if (!rows.length) {
-        body.innerHTML = "<tr><td colspan=\"4\" class=\"text-muted\">Наличие ещё не проверено. Нажмите «Проверить сейчас».</td></tr>";
-        return;
-    }
-    body.innerHTML = rows.map((row) => `
-        <tr>
-            <td>${escapeHtml(row.russian_name)}</td>
-            <td><span class="status-badge ${availabilityMeta(row.status).className}">${escapeHtml(row.label)}</span></td>
-            <td>${escapeHtml(row.pharmacies_minsk)}</td>
-            <td>${escapeHtml(row.message || "")}</td>
-        </tr>
-    `).join("");
-    setStatus(dailyAvailability.message || `Наличие на сегодня: ${rows.length} препаратов.`);
 }
 
 function bindGlobalDrugSearch() {
@@ -2832,14 +2875,8 @@ async function initPrototype() {
     await loadArchivedDrugsFromBackend();
     const startupUpdateStatus = await refreshUpdateStatus({ silent: true });
     await maybeAutoApplyStartupUpdate(startupUpdateStatus);
-    waitForDailyAvailability().then(() => refreshAvailabilityTable());
+    waitForDailyAvailability().then(() => renderDirectoryTable());
 
-    const refreshAvailabilityBtn = document.getElementById("refreshAvailabilityBtn");
-    if (refreshAvailabilityBtn) {
-        refreshAvailabilityBtn.addEventListener("click", () => {
-            refreshAvailabilityTable();
-        });
-    }
     const forceAvailabilityBtn = document.getElementById("forceAvailabilityBtn");
     if (forceAvailabilityBtn) {
         forceAvailabilityBtn.addEventListener("click", () => {

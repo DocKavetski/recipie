@@ -101,3 +101,31 @@ def test_unknown_cache_is_not_useful_and_force_rechecks(tmp_path: Path):
         store._thread.join(timeout=2)
     assert calls == ["Игрек", "Игрек", "Игрек"]
     assert store.lookup("торг")["status"] == "good"
+
+
+def test_force_recovers_from_dead_worker(tmp_path: Path):
+    calls = []
+
+    def counting_checker(query, aliases=None):
+        calls.append(query)
+        return _fake_checker(query, aliases)
+
+    store = DailyAvailabilityStore(tmp_path, checker=counting_checker)
+    drugs = [{"mnn": "Z", "russian_name": "Зет", "trade_names": []}]
+    store._checking = True
+    store._thread = None
+    store.ensure_today(drugs, force=True)
+    if store._thread:
+        store._thread.join(timeout=2)
+    assert calls == ["Зет"]
+    assert store.snapshot()["checking"] is False
+
+
+def test_shared_store_is_singleton(tmp_path: Path):
+    import backend.availability_cache as availability_cache
+
+    availability_cache._SHARED_STORE = None
+    first = availability_cache.shared_store(tmp_path)
+    second = availability_cache.shared_store(tmp_path / "other")
+    assert first is second
+    availability_cache._SHARED_STORE = None

@@ -11,12 +11,14 @@ from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 _REGISTERED = False
+_AVAILABILITY_REGISTERED = False
 
 
 def register_repository_exposes(repository: Any) -> None:
     """Регистрирует API, завязанные на каталог препаратов."""
     global _REGISTERED
     if _REGISTERED:
+        register_availability_exposes(repository)
         return
 
     try:
@@ -52,4 +54,59 @@ def register_repository_exposes(repository: Any) -> None:
     LOGGER.info(
         "Registered runtime Eel exposes: parse_treatment, get_archived_drugs, "
         "upsert_custom_drug, add_drug_from_tabletka, delete_custom_drug"
+    )
+    register_availability_exposes(repository)
+
+
+def register_availability_exposes(repository: Any) -> None:
+    """Регистрирует API наличия — важно для старого exe без обновлённого main.py."""
+    global _AVAILABILITY_REGISTERED
+    if _AVAILABILITY_REGISTERED:
+        return
+
+    try:
+        import eel
+    except Exception:  # noqa: BLE001
+        return
+
+    from backend.availability_cache import shared_store
+
+    try:
+        store = shared_store(repository.db_path.parent)
+    except Exception:  # noqa: BLE001
+        LOGGER.debug("availability store unavailable", exc_info=True)
+        return
+
+    @eel.expose
+    def get_daily_availability():
+        return store.snapshot()
+
+    @eel.expose
+    def ensure_daily_availability(force=False):
+        return store.ensure_today(repository.list_drugs(), force=bool(force))
+
+    @eel.expose
+    def refresh_catalog_availability(limit=20, force=False):
+        _ = limit
+        if force:
+            snapshot = store.ensure_today(repository.list_drugs(), force=True)
+        else:
+            snapshot = store.snapshot()
+            if not snapshot.get("checking") and not snapshot.get("fresh"):
+                snapshot = store.ensure_today(repository.list_drugs())
+        return {
+            "ok": True,
+            "city": "Минск",
+            "date": snapshot.get("date"),
+            "fresh": snapshot.get("fresh"),
+            "checking": snapshot.get("checking"),
+            "rows": snapshot.get("rows") or [],
+            "by_key": snapshot.get("by_key") or {},
+            "message": snapshot.get("message"),
+        }
+
+    _AVAILABILITY_REGISTERED = True
+    LOGGER.info(
+        "Registered runtime availability exposes: get_daily_availability, "
+        "ensure_daily_availability, refresh_catalog_availability"
     )

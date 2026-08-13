@@ -11,6 +11,7 @@ from backend.tabletka_enrich import TabletkaEnrichment, TabletkaVariant
 
 def test_initialize_registers_parse_treatment(tmp_path: Path, monkeypatch):
     runtime_exposes._REGISTERED = False
+    runtime_exposes._AVAILABILITY_REGISTERED = False
     exposed = {}
 
     class DummyEel:
@@ -29,6 +30,9 @@ def test_initialize_registers_parse_treatment(tmp_path: Path, monkeypatch):
     assert "add_drug_from_tabletka" in exposed
     assert "upsert_custom_drug" in exposed
     assert "delete_custom_drug" in exposed
+    assert "ensure_daily_availability" in exposed
+    assert "get_daily_availability" in exposed
+    assert "refresh_catalog_availability" in exposed
     result = exposed["parse_treatment"]("Эсциталопрам 10 мг утром")
     assert result["ok"] is True
     assert result["drugs"][0]["mnn"] == "Escitalopram"
@@ -38,6 +42,7 @@ def test_initialize_registers_parse_treatment(tmp_path: Path, monkeypatch):
 
 def test_runtime_expose_add_drug_from_tabletka(tmp_path: Path, monkeypatch):
     runtime_exposes._REGISTERED = False
+    runtime_exposes._AVAILABILITY_REGISTERED = False
     exposed = {}
 
     class DummyEel:
