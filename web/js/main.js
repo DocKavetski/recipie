@@ -218,12 +218,7 @@ function buildSchemeClipboardText(drugs) {
                 .filter(Boolean);
             const tradePart = trades.length ? `(${trades.join(", ")})` : "";
             const dosage = String(drug.dosage || "").trim();
-            const rawQty = Number.parseInt(String(drug.dispenseQty || "").trim(), 10);
-            const qty = Number.isFinite(rawQty) && rawQty > 0
-                ? rawQty
-                : extractDefaultDispenseQty(drug.packaging);
-            const qtyPart = qty ? `D.t.d. № ${qty}` : "";
-            const head = [form, title, tradePart, dosage, qtyPart].filter(Boolean).join(" ").trim();
+            const head = [form, title, tradePart, dosage].filter(Boolean).join(" ").trim();
             const scheme = String(drug.selectedScheme || "").trim();
             return scheme ? `${head} — ${scheme}` : head;
         })
