@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+import requests
 
 from backend.tabletka import MinskAvailability, TabletkaOffer, check_availability_minsk, search_tabletka
 
@@ -39,7 +40,7 @@ def test_check_availability_uses_aliases(monkeypatch):
     assert result.pharmacies_minsk == 2
 
 
-def test_result_page_failure_is_unknown_not_none(monkeypatch):
+def test_search_totals_used_when_result_page_fails(monkeypatch):
     monkeypatch.setattr(
         "backend.tabletka.search_tabletka",
         lambda *args, **kwargs: [
@@ -48,8 +49,36 @@ def test_result_page_failure_is_unknown_not_none(monkeypatch):
     )
     monkeypatch.setattr("backend.tabletka.count_minsk_pharmacies", lambda *_a, **_k: None)
     result = check_availability_minsk("атаракс")
-    assert result.status == "unknown"
-    assert result.label == "Нет данных"
+    assert result.status == "good"
+    assert result.label == "Есть"
+    assert result.pharmacies_minsk == 100
+
+
+def test_ssl_retry_disables_verify(monkeypatch):
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        text = "<html></html>"
+
+    class FakeSession:
+        def __init__(self):
+            self.verify = "/tmp/cacert.pem"
+            self.calls = 0
+
+        def get(self, *args, **kwargs):
+            self.calls += 1
+            if self.verify:
+                raise requests.exceptions.SSLError("certificate verify failed")
+            return FakeResponse()
+
+    session = FakeSession()
+    from backend.tabletka import _get_with_retries
+
+    response = _get_with_retries(session, "https://tabletka.by/search")
+    assert response is not None
+    assert session.verify is False
+    assert session.calls >= 2
 
 
 @pytest.mark.network
