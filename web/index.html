@@ -93,11 +93,10 @@
                                     <th style="min-width: 150px;">Торговое название</th>
                                     <th style="min-width: 120px;">МНН</th>
                                     <th style="min-width: 150px;">Русское название</th>
-                                    <th style="min-width: 140px;">Лат. название</th>
                                     <th style="min-width: 90px;">Форма</th>
                                     <th style="min-width: 90px;">Дозировка</th>
                                     <th style="min-width: 90px;">Фасовка</th>
-                                    <th style="min-width: 110px;">D.t.d. №</th>
+                                    <th style="min-width: 148px;">D.t.d. №</th>
                                     <th style="min-width: 220px;" title="Можно выбрать из списка или ввести вручную">Схема</th>
                                     <th style="min-width: 90px;" title="Наличие в аптеках Минска (tabletka.by)">Наличие</th>
                                     <th style="min-width: 60px;"></th>
@@ -133,7 +132,7 @@
                     <div class="actions-bar">
                         <button class="btn btn-sm btn-primary" id="printBtn"><i class="fa-solid fa-print me-1"></i>Печать</button>
                         <button class="btn btn-sm btn-outline-secondary" id="saveHistoryBtn">В историю</button>
-                        <button class="btn btn-sm btn-outline-secondary" id="showSchemeBtn" title="Скопировать схемы приёма: латынь, торговые в скобках, доза и схема (без D.t.d.)">Схема</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="showSchemeBtn" title="Скопировать схемы приёма: МНН, торговые в скобках, доза и схема (без D.t.d.)">Схема</button>
                         <button class="btn btn-sm btn-outline-secondary" id="clearFormBtn">Очистить</button>
                         <button class="btn btn-sm btn-outline-secondary" id="restoreAutosaveBtn">Автосохранение</button>
                         <span class="vr d-none d-md-inline mx-1"></span>
@@ -209,11 +208,10 @@
                                     <th style="min-width: 150px;">Торговое название</th>
                                     <th style="min-width: 120px;">МНН</th>
                                     <th style="min-width: 150px;">Русское название</th>
-                                    <th style="min-width: 140px;">Лат. название</th>
                                     <th style="min-width: 90px;">Форма</th>
                                     <th style="min-width: 90px;">Дозировка</th>
                                     <th style="min-width: 90px;">Фасовка</th>
-                                    <th style="min-width: 110px;">D.t.d. №</th>
+                                    <th style="min-width: 148px;">D.t.d. №</th>
                                     <th style="min-width: 220px;">Схема</th>
                                     <th class="template-col-availability" style="min-width: 90px;">Наличие</th>
                                     <th style="min-width: 60px;"></th>
@@ -428,9 +426,11 @@
                     <option>Выберите</option>
                 </select>
             </td>
-            <td><input class="form-control form-control-sm drug-mnn-input" type="text"></td>
+            <td>
+                <input class="form-control form-control-sm drug-mnn-input" type="text">
+                <input class="drug-latin-input" type="hidden">
+            </td>
             <td><input class="form-control form-control-sm drug-russian-input" type="text"></td>
-            <td><input class="form-control form-control-sm drug-latin-input" type="text"></td>
             <td>
                 <select class="form-select form-select-sm drug-form-select"></select>
             </td>
@@ -438,7 +438,13 @@
                 <select class="form-select form-select-sm drug-dosage-select"></select>
             </td>
             <td><input class="form-control form-control-sm drug-packaging-input" type="text"></td>
-            <td><input class="form-control form-control-sm drug-dispense-input" type="text" inputmode="numeric" autocomplete="off" placeholder="№"></td>
+            <td>
+                <div class="dispense-stepper">
+                    <button class="dispense-pack-btn dispense-minus-btn" type="button" title="− упаковка" aria-label="Минус упаковка">−уп</button>
+                    <input class="form-control form-control-sm drug-dispense-input" type="text" inputmode="numeric" autocomplete="off" placeholder="№">
+                    <button class="dispense-pack-btn dispense-plus-btn" type="button" title="+ упаковка" aria-label="Плюс упаковка">+уп</button>
+                </div>
+            </td>
             <td>
                 <input
                     class="form-control form-control-sm drug-scheme-input"

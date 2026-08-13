@@ -278,8 +278,7 @@ function buildSchemeClipboardText(drugs) {
         .filter((drug) => drug.mnn)
         .map((drug) => {
             const form = String(drug.drug_form || "").trim();
-            const latin = String(drug.latin_name || "").trim();
-            const title = latin || String(drug.russian_name || drug.mnn || "").trim();
+            const title = String(drug.mnn || drug.russian_name || "").trim();
             const trades = (Array.isArray(drug.trade_names) ? drug.trade_names : [])
                 .map((name) => String(name || "").trim())
                 .filter(Boolean);
@@ -304,7 +303,7 @@ function getRowState(row) {
         selectedTrade: row.querySelector(".drug-trade-select").value,
         mnn: row.querySelector(".drug-mnn-input").value.trim(),
         russian_name: row.querySelector(".drug-russian-input").value.trim(),
-        latin_name: row.querySelector(".drug-latin-input").value.trim(),
+        latin_name: (row.querySelector(".drug-latin-input")?.value || "").trim(),
         drug_form: row.querySelector(".drug-form-select").value.trim(),
         dosage: row.querySelector(".drug-dosage-select").value.trim(),
         packaging: row.querySelector(".drug-packaging-input").value.trim(),
@@ -1386,7 +1385,10 @@ function populateRow(row, drug, options = {}) {
 
     row.querySelector(".drug-mnn-input").value = optionLabel(drug.mnn);
     row.querySelector(".drug-russian-input").value = optionLabel(drug.russian_name);
-    row.querySelector(".drug-latin-input").value = optionLabel(drug.latin_name);
+    const latinInput = row.querySelector(".drug-latin-input");
+    if (latinInput) {
+        latinInput.value = optionLabel(drug.latin_name);
+    }
     row.querySelector(".drug-packaging-input").value = optionLabel(drug.packaging);
     const hasExplicitDispense = options.dispenseQty !== undefined && options.dispenseQty !== null && options.dispenseQty !== "";
     const baseDispenseQty = hasExplicitDispense
