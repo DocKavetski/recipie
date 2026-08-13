@@ -21,7 +21,6 @@
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-recipe" type="button">Рецепт</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-templates" type="button">Шаблоны</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-directory" type="button">Справочник</button></li>
-            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-availability" type="button">Наличие</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-settings" type="button">Настройки</button></li>
         </ul>
 
@@ -228,8 +227,16 @@
                 <div class="panel-box">
                     <div class="panel-head">
                         <div>
-                            <div class="panel-title mb-0">Справочник препаратов</div>
-                            <div class="stub-note">Активный каталог для выписки. Ниже — архив препаратов, которых нет в продаже.</div>
+                            <div class="panel-title mb-0">Справочник и наличие</div>
+                            <div class="stub-note">
+                                Каталог для выписки. Наличие в Минске — из дневного опроса tabletka.by.
+                            </div>
+                            <div class="text-muted small mt-1" id="directoryAvailabilityMeta">Наличие ещё не проверялось.</div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-sm btn-primary" id="forceAvailabilityBtn" type="button">
+                                <i class="fa-solid fa-rotate me-1"></i>Проверить наличие
+                            </button>
                         </div>
                     </div>
 
@@ -268,6 +275,7 @@
                                     <th>Дозировка</th>
                                     <th>Фасовка</th>
                                     <th>Торговые названия</th>
+                                    <th style="min-width: 90px;" title="Наличие в аптеках Минска">Наличие</th>
                                     <th style="min-width: 70px;"></th>
                                 </tr>
                             </thead>
@@ -297,46 +305,6 @@
                                 </tbody>
                             </table>
                         </div>
-                    </div>
-                </div>
-            </section>
-
-            <section class="tab-pane fade" id="tab-availability">
-                <div class="panel-box">
-                    <div class="panel-head">
-                        <div>
-                            <div class="panel-title mb-0">Наличие в Минске</div>
-                            <div class="stub-note">
-                                Наличие в Минске проверяется один раз в день при первом запуске.
-                                Если опрос не прошёл — нажмите «Проверить сейчас».
-                            </div>
-                        </div>
-                        <div class="d-flex flex-wrap gap-2">
-                            <button class="btn btn-sm btn-primary" id="forceAvailabilityBtn" type="button">
-                                <i class="fa-solid fa-rotate me-1"></i>Проверить сейчас
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary" id="refreshAvailabilityBtn" type="button">
-                                <i class="fa-solid fa-pills me-1"></i>Показать кэш
-                            </button>
-                        </div>
-                    </div>
-                    <div class="availability-howto text-muted small mb-3">
-                        Принудительная проверка заново опрашивает tabletka.by по всему каталогу. Это занимает около минуты.
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-striped align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Препарат</th>
-                                    <th>Статус</th>
-                                    <th>Аптек в Минске</th>
-                                    <th>Комментарий</th>
-                                </tr>
-                            </thead>
-                            <tbody id="availabilityTableBody">
-                                <tr><td colspan="4" class="text-muted">Нажмите «Проверить сейчас», чтобы запросить наличие на tabletka.by</td></tr>
-                            </tbody>
-                        </table>
                     </div>
                 </div>
             </section>
@@ -397,7 +365,7 @@
                     <div class="col-12 col-lg-6">
                         <div class="panel-box h-100">
                             <div class="panel-title">Поведение</div>
-                            <div class="stub-note mt-2">Наличие в аптеках проверяется один раз в день при первом запуске.</div>
+                            <div class="stub-note mt-2">Наличие в аптеках проверяется во вкладке «Справочник» (кнопка «Проверить наличие»).</div>
                             <div class="form-check mt-2">
                                 <input class="form-check-input" type="checkbox">
                                 <label class="form-check-label">Быстрая печать без диалога</label>
