@@ -269,7 +269,7 @@ function addDrugFromTemplateSearch(drug) {
         templateDrugSearch.value = "";
     }
     hideTemplateSearchDropdown();
-    setStatus(`В шаблон добавлен: ${drug.russian_name}.`);
+    setStatus(`В шаблон добавлен: ${optionLabel(drug.russian_name) || optionLabel(drug.mnn) || "препарат"}.`);
     templateDrugSearch?.focus();
 }
 

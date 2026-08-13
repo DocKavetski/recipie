@@ -115,8 +115,72 @@ const BACK_BLANK_HTML = `
   `;
 
 function setStatus(message) {
-    statusText.textContent = message;
+    statusText.textContent = formatUserText(message);
 }
+
+function formatUserText(value) {
+    if (value == null || value === "") {
+        return "";
+    }
+    if (typeof value === "string") {
+        return value;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+    }
+    if (typeof value === "object") {
+        if (typeof value.message === "string" && value.message.trim()) {
+            return value.message.trim();
+        }
+        if (typeof value.error === "string" && value.error.trim()) {
+            return value.error.trim();
+        }
+        if (typeof value.label === "string" && value.label.trim()) {
+            return value.label.trim();
+        }
+        try {
+            return JSON.stringify(value);
+        } catch (_error) {
+            return "";
+        }
+    }
+    return String(value);
+}
+
+function optionLabel(value) {
+    if (value == null) {
+        return "";
+    }
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return String(value).trim();
+    }
+    if (typeof value === "object") {
+        for (const key of ["label", "name", "text", "value", "dosage", "trade_name", "mnn", "russian_name"]) {
+            if (typeof value[key] === "string" && value[key].trim()) {
+                return value[key].trim();
+            }
+        }
+    }
+    return "";
+}
+
+function asStringList(values) {
+    if (values == null) {
+        return [];
+    }
+    const list = Array.isArray(values)
+        ? values
+        : (typeof values === "object" ? Object.keys(values) : [values]);
+    const out = [];
+    for (const item of list) {
+        const text = optionLabel(item);
+        if (text && text !== "[object Object]" && !out.includes(text)) {
+            out.push(text);
+        }
+    }
+    return out;
+}
+
 
 function normalizePreviewData(state, preview) {
     const previewData = preview || {};
@@ -860,8 +924,10 @@ function normalizeText(value) {
 
 function fillOptions(select, options, selectedValue) {
     select.innerHTML = "";
+    const values = asStringList(options);
+    const selected = optionLabel(selectedValue);
 
-    if (!options.length) {
+    if (!values.length) {
         const option = document.createElement("option");
         option.value = "";
         option.textContent = "Выбрать";
@@ -869,11 +935,11 @@ function fillOptions(select, options, selectedValue) {
         return;
     }
 
-    options.forEach((optionValue) => {
+    values.forEach((optionValue) => {
         const option = document.createElement("option");
         option.value = optionValue;
         option.textContent = optionValue;
-        if (optionValue === selectedValue) {
+        if (optionValue === selected) {
             option.selected = true;
         }
         select.appendChild(option);
@@ -919,14 +985,8 @@ function fillSchemeOptions(row, options, selectedValue) {
     ensureSchemeListId(row);
     const list = row.querySelector(".drug-scheme-datalist");
     const input = row.querySelector(".drug-scheme-input");
-    const values = [];
-    for (const optionValue of options || []) {
-        const text = String(optionValue || "").trim();
-        if (text && !values.includes(text)) {
-            values.push(text);
-        }
-    }
-    const selected = String(selectedValue || "").trim();
+    const values = asStringList(options);
+    const selected = optionLabel(selectedValue);
     if (selected && !values.includes(selected)) {
         values.unshift(selected);
     }
@@ -1001,12 +1061,12 @@ function renderDirectoryTable() {
         row.innerHTML = `
             <td>${escapeHtml(drug.category)}${customBadge}</td>
             <td>${escapeHtml(drug.mnn)}</td>
-            <td>${escapeHtml(drug.russian_name)}</td>
-            <td>${escapeHtml(drug.latin_name)}</td>
-            <td>${escapeHtml((drug.form_options || [drug.drug_form]).join(", "))}</td>
-            <td>${escapeHtml((drug.dosage_options || [drug.dosage]).join(", "))}</td>
-            <td>${escapeHtml(drug.packaging)}</td>
-            <td>${escapeHtml((drug.trade_names || []).join(", "))}</td>
+            <td>${escapeHtml(optionLabel(drug.russian_name))}</td>
+            <td>${escapeHtml(optionLabel(drug.latin_name))}</td>
+            <td>${escapeHtml(asStringList(drug.form_options || [drug.drug_form]).join(", "))}</td>
+            <td>${escapeHtml(asStringList(drug.dosage_options || [drug.dosage]).join(", "))}</td>
+            <td>${escapeHtml(optionLabel(drug.packaging))}</td>
+            <td>${escapeHtml(asStringList(drug.trade_names).join(", "))}</td>
             ${deleteCell}
         `;
         directoryTableBody.appendChild(row);
@@ -1178,13 +1238,15 @@ function bindSchemeInput(row) {
 
 function dosagesForForm(row, form) {
     const map = JSON.parse(row.dataset.formDosageMap || "{}");
-    const mapped = map[form];
-    if (Array.isArray(mapped) && mapped.length) {
+    const mapped = asStringList(map[form]);
+    if (mapped.length) {
         return mapped;
     }
-    return Array.from(row.querySelector(".drug-dosage-select").options)
-        .map((option) => option.value)
-        .filter(Boolean);
+    return asStringList(
+        Array.from(row.querySelector(".drug-dosage-select").options)
+            .map((option) => option.value)
+            .filter(Boolean),
+    );
 }
 
 function bindFormDosageSelects(row) {
@@ -1225,35 +1287,49 @@ function bindRowRemoval(row, container = drugRowsContainer) {
 function populateRow(row, drug, options = {}) {
     row.dataset.tradeDetails = JSON.stringify(drug.trade_details || {});
     row.dataset.defaultPackaging = drug.packaging || "";
-    const formOptions = drug.form_options?.length
-        ? drug.form_options
-        : (drug.drug_form ? [drug.drug_form] : ["Tab."]);
-    const formDosageMap = drug.form_dosage_map && Object.keys(drug.form_dosage_map).length
+    const formOptions = asStringList(
+        drug.form_options?.length
+            ? drug.form_options
+            : (drug.drug_form ? [drug.drug_form] : ["Tab."]),
+    );
+    const rawFormDosageMap = drug.form_dosage_map && Object.keys(drug.form_dosage_map).length
         ? drug.form_dosage_map
-        : Object.fromEntries(formOptions.map((form) => [form, drug.dosage_options?.length ? drug.dosage_options : (drug.dosage ? [drug.dosage] : [])]));
+        : Object.fromEntries(formOptions.map((form) => [form, asStringList(drug.dosage_options || (drug.dosage ? [drug.dosage] : []))]));
+    const formDosageMap = {};
+    for (const [form, doses] of Object.entries(rawFormDosageMap || {})) {
+        const formKey = optionLabel(form);
+        if (!formKey) {
+            continue;
+        }
+        formDosageMap[formKey] = asStringList(
+            Array.isArray(doses) ? doses : (doses && typeof doses === "object" ? Object.keys(doses) : []),
+        );
+    }
     row.dataset.formDosageMap = JSON.stringify(formDosageMap);
 
-    row.querySelector(".drug-mnn-input").value = drug.mnn || "";
-    row.querySelector(".drug-russian-input").value = drug.russian_name || "";
-    row.querySelector(".drug-latin-input").value = drug.latin_name || "";
-    row.querySelector(".drug-packaging-input").value = drug.packaging || "";
+    row.querySelector(".drug-mnn-input").value = optionLabel(drug.mnn);
+    row.querySelector(".drug-russian-input").value = optionLabel(drug.russian_name);
+    row.querySelector(".drug-latin-input").value = optionLabel(drug.latin_name);
+    row.querySelector(".drug-packaging-input").value = optionLabel(drug.packaging);
     const hasExplicitDispense = options.dispenseQty !== undefined && options.dispenseQty !== null && options.dispenseQty !== "";
     const baseDispenseQty = hasExplicitDispense
         ? options.dispenseQty
         : (drug.dispense_qty || extractDefaultDispenseQty(drug.packaging));
-    row.querySelector(".drug-dispense-input").value = baseDispenseQty;
+    row.querySelector(".drug-dispense-input").value = optionLabel(baseDispenseQty) || baseDispenseQty || "";
 
     const formSelect = row.querySelector(".drug-form-select");
     const dosageSelect = row.querySelector(".drug-dosage-select");
     const selectedForm = options.drug_form || drug.drug_form || formOptions[0] || "";
-    fillOptions(formSelect, formOptions, selectedForm);
-    const dosesForSelected = formDosageMap[selectedForm] || drug.dosage_options || (drug.dosage ? [drug.dosage] : []);
+    fillOptions(formSelect, asStringList(formOptions), selectedForm);
+    const dosesForSelected = asStringList(
+        formDosageMap[selectedForm] || drug.dosage_options || (drug.dosage ? [drug.dosage] : []),
+    );
     const selectedDosage = options.dosage || drug.dosage || dosesForSelected[0] || "";
     fillOptions(dosageSelect, dosesForSelected, selectedDosage);
 
     const tradeSelect = row.querySelector(".drug-trade-select");
     const selectedTrade = options.selectedTrade || "";
-    fillOptions(tradeSelect, drug.trade_names || [], selectedTrade);
+    fillOptions(tradeSelect, asStringList(drug.trade_names || []), selectedTrade);
     fillSchemeOptions(
         row,
         drug.scheme_options || [],
@@ -1308,8 +1384,8 @@ function renderSearchDropdown(matches, activeIndex = 0) {
         button.type = "button";
         button.className = `drug-search-item${index === searchActiveIndex ? " is-active" : ""}`;
         button.innerHTML = `
-            <div class="drug-search-item-title">${escapeHtml(drug.russian_name)} · ${escapeHtml(drug.mnn)}</div>
-            <div class="drug-search-item-meta">${escapeHtml((drug.form_options || [drug.drug_form]).join("/"))} · ${escapeHtml((drug.dosage_options || [drug.dosage]).slice(0, 4).join(", "))} · ${(drug.trade_names || []).slice(0, 3).map(escapeHtml).join(", ")}</div>
+            <div class="drug-search-item-title">${escapeHtml(optionLabel(drug.russian_name))} · ${escapeHtml(optionLabel(drug.mnn))}</div>
+            <div class="drug-search-item-meta">${escapeHtml(asStringList(drug.form_options || [drug.drug_form]).join("/"))} · ${escapeHtml(asStringList(drug.dosage_options || [drug.dosage]).slice(0, 4).join(", "))} · ${asStringList(drug.trade_names).slice(0, 3).map(escapeHtml).join(", ")}</div>
         `;
         button.addEventListener("mousedown", (event) => {
             event.preventDefault();
@@ -1335,7 +1411,7 @@ function addDrugFromSearch(drug) {
     globalDrugSearch.value = "";
     hideSearchDropdown();
     scheduleAutosave();
-    setStatus(`Добавлен: ${drug.russian_name}.`);
+    setStatus(`Добавлен: ${optionLabel(drug.russian_name) || optionLabel(drug.mnn) || "препарат"}.`);
     globalDrugSearch.focus();
 
     const row = drugRowsContainer.lastElementChild;
@@ -2438,14 +2514,18 @@ function bindManualDrugControls() {
                 if (queryInput) {
                     queryInput.value = "";
                 }
-                const message = result?.message || `Препарат «${result?.russian_name || query}» добавлен.`;
+                const message = formatUserText(
+                    result?.message
+                    || (result?.russian_name ? `Препарат «${optionLabel(result.russian_name)}» добавлен.` : "")
+                    || `Препарат «${query}» добавлен.`
+                );
                 setStatus(message);
                 if (hint) {
                     hint.textContent = message;
                 }
             } catch (error) {
                 console.error(error);
-                const text = String(error?.message || error || "Не удалось добавить препарат.");
+                const text = formatUserText(error) || "Не удалось добавить препарат.";
                 setStatus(text);
                 if (hint) {
                     hint.textContent = text;

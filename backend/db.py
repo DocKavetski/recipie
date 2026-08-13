@@ -301,19 +301,48 @@ class DrugRepository:
         packaging = str(payload.get("packaging") or "N30").strip() or "N30"
         category = str(payload.get("category") or "Прочее").strip() or "Прочее"
         trade_names = [
-            part.strip()
-            for part in str(payload.get("trade_names_raw") or payload.get("trade_names") or "").replace(",", ";").split(";")
-            if part.strip()
+            str(x).strip()
+            for x in (
+                payload.get("trade_names")
+                if isinstance(payload.get("trade_names"), list)
+                else str(payload.get("trade_names_raw") or payload.get("trade_names") or "").replace(",", ";").split(";")
+            )
+            if str(x).strip() and not str(x).strip().startswith("{")
         ]
-        if isinstance(payload.get("trade_names"), list):
-            trade_names = [str(x).strip() for x in payload["trade_names"] if str(x).strip()]
-        form_options = payload.get("form_options") or [drug_form]
-        dosage_options = payload.get("dosage_options") or ([dosage] if dosage and dosage != "—" else [])
-        form_dosage_map = payload.get("form_dosage_map") or {drug_form: list(dosage_options)}
-        scheme_options = payload.get("scheme_options") or [
-            "по 1 таблетке утром",
-            "по 1 таблетке вечером",
-            "по 1/2 таблетки на ночь",
+        form_options = [
+            str(x).strip()
+            for x in (payload.get("form_options") or [drug_form])
+            if str(x).strip() and not str(x).startswith("{")
+        ] or [drug_form]
+        dosage_options = [
+            str(x).strip()
+            for x in (payload.get("dosage_options") or ([dosage] if dosage and dosage != "—" else []))
+            if str(x).strip() and not str(x).startswith("{")
+        ]
+        raw_map = payload.get("form_dosage_map") or {drug_form: list(dosage_options)}
+        form_dosage_map: dict[str, list[str]] = {}
+        if isinstance(raw_map, dict):
+            for form, doses in raw_map.items():
+                form_key = str(form or "").strip()
+                if not form_key:
+                    continue
+                if isinstance(doses, dict):
+                    dose_list = [str(k).strip() for k in doses.keys() if str(k).strip()]
+                elif isinstance(doses, list):
+                    dose_list = [str(x).strip() for x in doses if str(x).strip() and not str(x).startswith("{")]
+                else:
+                    dose_list = []
+                form_dosage_map[form_key] = dose_list
+        if not form_dosage_map:
+            form_dosage_map = {drug_form: list(dosage_options)}
+        scheme_options = [
+            str(x).strip()
+            for x in (payload.get("scheme_options") or [
+                "по 1 таблетке утром",
+                "по 1 таблетке вечером",
+                "по 1/2 таблетки на ночь",
+            ])
+            if str(x).strip() and not str(x).startswith("{") and "[object Object]" not in str(x)
         ]
         search_aliases = list(dict.fromkeys([
             russian.lower(),
@@ -443,6 +472,30 @@ class DrugRepository:
         form_dosage_map = (
             json.loads(row["form_dosage_map_json"]) if "form_dosage_map_json" in keys else {}
         )
+        trade_names = json.loads(row["trade_names_json"])
+        if not isinstance(form_options, list):
+            form_options = []
+        if not isinstance(dosage_options, list):
+            dosage_options = []
+        if not isinstance(trade_names, list):
+            trade_names = list(trade_names.keys()) if isinstance(trade_names, dict) else []
+        form_options = [str(x).strip() for x in form_options if str(x).strip() and not str(x).strip().startswith("{")]
+        dosage_options = [str(x).strip() for x in dosage_options if str(x).strip() and not str(x).strip().startswith("{")]
+        trade_names = [str(x).strip() for x in trade_names if str(x).strip() and not str(x).strip().startswith("{")]
+        cleaned_map: dict[str, list[str]] = {}
+        if isinstance(form_dosage_map, dict):
+            for form, doses in form_dosage_map.items():
+                form_key = str(form or "").strip()
+                if not form_key:
+                    continue
+                if isinstance(doses, dict):
+                    dose_list = [str(k).strip() for k in doses.keys() if str(k).strip()]
+                elif isinstance(doses, list):
+                    dose_list = [str(x).strip() for x in doses if str(x).strip() and not str(x).startswith("{")]
+                else:
+                    dose_list = []
+                cleaned_map[form_key] = dose_list
+        form_dosage_map = cleaned_map
         if not form_options and row["drug_form"]:
             form_options = [row["drug_form"]]
         if not dosage_options and row["dosage"]:
@@ -450,10 +503,23 @@ class DrugRepository:
         if not form_dosage_map:
             form_dosage_map = {form: list(dosage_options) for form in form_options}
         scheme_options = json.loads(row["scheme_options_json"])
+        if not isinstance(scheme_options, list):
+            scheme_options = []
+        scheme_options = [
+            str(x).strip()
+            for x in scheme_options
+            if str(x).strip() and "[object Object]" not in str(x) and not str(x).startswith("{")
+        ]
         has_custom_scheme = False
         if "custom_scheme_options_json" in keys and row["custom_scheme_options_json"]:
-            scheme_options = json.loads(row["custom_scheme_options_json"])
-            has_custom_scheme = True
+            custom_schemes = json.loads(row["custom_scheme_options_json"])
+            if isinstance(custom_schemes, list):
+                scheme_options = [
+                    str(x).strip()
+                    for x in custom_schemes
+                    if str(x).strip() and "[object Object]" not in str(x) and not str(x).startswith("{")
+                ]
+                has_custom_scheme = True
         return {
             "category": row["category"],
             "mnn": row["mnn"],
@@ -465,7 +531,7 @@ class DrugRepository:
             "form_options": form_options,
             "dosage_options": dosage_options,
             "form_dosage_map": form_dosage_map,
-            "trade_names": json.loads(row["trade_names_json"]),
+            "trade_names": trade_names,
             "search_aliases": json.loads(row["search_aliases_json"]),
             "scheme_options": scheme_options,
             "has_custom_scheme": has_custom_scheme,
