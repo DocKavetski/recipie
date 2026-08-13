@@ -307,16 +307,21 @@
                         <div>
                             <div class="panel-title mb-0">Наличие в Минске</div>
                             <div class="stub-note">
-                                Наличие в Минске проверяется один раз в день при первом запуске программы.
-                                При добавлении препарата в рецепт берётся сегодняшний кэш — без повторных запросов.
+                                Наличие в Минске проверяется один раз в день при первом запуске.
+                                Если опрос не прошёл — нажмите «Проверить сейчас».
                             </div>
                         </div>
-                        <button class="btn btn-sm btn-outline-secondary" id="refreshAvailabilityBtn" type="button">
-                            <i class="fa-solid fa-pills me-1"></i>Показать сегодня
-                        </button>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-sm btn-primary" id="forceAvailabilityBtn" type="button">
+                                <i class="fa-solid fa-rotate me-1"></i>Проверить сейчас
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" id="refreshAvailabilityBtn" type="button">
+                                <i class="fa-solid fa-pills me-1"></i>Показать кэш
+                            </button>
+                        </div>
                     </div>
                     <div class="availability-howto text-muted small mb-3">
-                        Утренний опрос tabletka.by идёт в фоне. Повторный запуск в тот же день кэш не обновляет.
+                        Принудительная проверка заново опрашивает tabletka.by по всему каталогу. Это занимает около минуты.
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm table-striped align-middle mb-0">
@@ -329,7 +334,7 @@
                                 </tr>
                             </thead>
                             <tbody id="availabilityTableBody">
-                                <tr><td colspan="4" class="text-muted">Нажмите «Проверить справочник», чтобы запросить наличие на tabletka.by</td></tr>
+                                <tr><td colspan="4" class="text-muted">Нажмите «Проверить сейчас», чтобы запросить наличие на tabletka.by</td></tr>
                             </tbody>
                         </table>
                     </div>

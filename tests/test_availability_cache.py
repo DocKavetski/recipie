@@ -7,6 +7,7 @@ from pathlib import Path
 from backend.availability_cache import (
     DailyAvailabilityStore,
     build_daily_cache,
+    has_useful_rows,
     is_fresh,
     lookup_cached,
     today_key,
@@ -62,3 +63,41 @@ def test_store_skips_second_refresh(tmp_path: Path):
     assert calls == ["Икс"]
     assert first["ok"] is True
     assert store.lookup("икс")["label"] == "Есть"
+    assert "by_key" in store.snapshot()
+    assert store.snapshot()["by_key"]["икс"]["status"] == "good"
+
+
+def test_unknown_cache_is_not_useful_and_force_rechecks(tmp_path: Path):
+    calls = []
+
+    def flaky_checker(query, aliases=None):
+        calls.append(query)
+        status = "unknown" if len(calls) == 1 else "good"
+        return MinskAvailability(
+            query=query,
+            status=status,
+            label="Нет данных" if status == "unknown" else "Есть",
+            pharmacies_minsk=0 if status == "unknown" else 4,
+            offers=[],
+            message=status,
+        )
+
+    store = DailyAvailabilityStore(tmp_path, checker=flaky_checker)
+    drugs = [{"mnn": "Y", "russian_name": "Игрек", "trade_names": ["Торг"]}]
+    store.ensure_today(drugs)
+    if store._thread:
+        store._thread.join(timeout=2)
+    assert calls == ["Игрек"]
+    assert is_fresh(store.snapshot()) is True
+    assert has_useful_rows(store.snapshot()) is False
+
+    store.ensure_today(drugs)
+    if store._thread:
+        store._thread.join(timeout=2)
+    assert calls == ["Игрек", "Игрек"]
+
+    store.ensure_today(drugs, force=True)
+    if store._thread:
+        store._thread.join(timeout=2)
+    assert calls == ["Игрек", "Игрек", "Игрек"]
+    assert store.lookup("торг")["status"] == "good"
