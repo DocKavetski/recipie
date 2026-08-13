@@ -23,7 +23,10 @@ def number_to_words_ru(value: Any) -> str:
     try:
         number = int(str(value).strip())
     except (TypeError, ValueError):
-        return str(value or "")
+        try:
+            number = int(float(str(value).strip()))
+        except (TypeError, ValueError):
+            return str(value or "")
 
     if number < 0:
         return str(number)

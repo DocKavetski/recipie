@@ -254,6 +254,12 @@ def clean_scheme_text(value: Any) -> str:
     text = _PAREN_BLOCK_RE.sub(" ", text)
     text = re.sub(r"[()]", " ", text)
     text = re.sub(r"\s+", " ", text).strip(" ,.;")
+    # «эсциталопрам 10» без единицы оставляет хвост «10» после времени приёма
+    text = re.sub(
+        r"(?i)(\b(?:утром|вечером|днём|днем|ночь|сном|еды|потребности|день))\s+\d+$",
+        r"\1",
+        text,
+    )
     return text
 
 
