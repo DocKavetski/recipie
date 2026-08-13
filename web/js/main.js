@@ -53,7 +53,7 @@ let searchActiveIndex = 0;
 let latestUpdateStatus = null;
 let printBlankCssText = "";
 let autoUpdateStarted = false;
-let dailyAvailability = { date: "", fresh: false, checking: false, useful: false, rows: [], byKey: {}, progress: null };
+let dailyAvailability = { date: "", fresh: false, checking: false, useful: false, rows: [], byKey: {}, progress: null, message: "" };
 
 const DUPLEX_BACK_SLOT = [1, 0, 3, 2];
 const PRINT_CUT_MARKS_HTML = `
@@ -1712,7 +1712,18 @@ async function forceCheckDailyAvailability() {
         }
         await loadDailyAvailability({ start: true, force: true });
         const started = Date.now();
-        while (dailyAvailability.checking && Date.now() - started < 360000) {
+        // Даже если флаг checking сразу сбросился, подождём пару опросов —
+        // фоновый поток мог не успеть отметиться.
+        let idlePolls = 0;
+        while (Date.now() - started < 360000) {
+            if (!dailyAvailability.checking) {
+                idlePolls += 1;
+                if (dailyAvailability.useful || idlePolls >= 3) {
+                    break;
+                }
+            } else {
+                idlePolls = 0;
+            }
             await new Promise((resolve) => window.setTimeout(resolve, 1500));
             await loadDailyAvailability();
             updateDirectoryAvailabilityMeta();
@@ -1726,7 +1737,10 @@ async function forceCheckDailyAvailability() {
         } else if (dailyAvailability.checking) {
             setStatus("Проверка ещё идёт в фоне — статусы появятся в справочнике.");
         } else {
-            setStatus(dailyAvailability.message || "Проверка завершилась без данных. Нажмите «Проверить наличие» ещё раз.");
+            setStatus(
+                dailyAvailability.message
+                || "Не удалось получить наличие с tabletka.by. Проверьте интернет и нажмите «Проверить наличие» ещё раз.",
+            );
         }
     } catch (error) {
         console.error(error);

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import ssl
 import time
 from dataclasses import dataclass
 from typing import Any, Iterable
@@ -11,6 +12,7 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from urllib3.exceptions import InsecureRequestWarning
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,10 +49,53 @@ class MinskAvailability:
     message: str = ""
 
 
+def _is_ssl_error(exc: BaseException) -> bool:
+    messages = [str(exc)]
+    current: BaseException | None = exc
+    for _ in range(5):
+        if current is None:
+            break
+        messages.append(str(current))
+        current = current.__cause__ or current.__context__
+    blob = " ".join(messages).lower()
+    return (
+        isinstance(exc, ssl.SSLError)
+        or "certificate verify failed" in blob
+        or "local issuer certificate" in blob
+        or "unable to get local issuer certificate" in blob
+        or "ssl: certificate_verify_failed" in blob
+        or "sslerror" in blob
+    )
+
+
+def _certifi_bundle() -> str | None:
+    try:
+        import certifi
+
+        return certifi.where()
+    except Exception:
+        return None
+
+
 def _session() -> requests.Session:
+    """Сессия с CA из certifi — в portable Windows системные сертификаты часто пустые."""
     session = requests.Session()
     session.headers.update(HEADERS)
+    bundle = _certifi_bundle()
+    if bundle:
+        session.verify = bundle
     return session
+
+
+def _disable_verify(session: requests.Session) -> None:
+    if session.verify is False:
+        return
+    session.verify = False
+    try:
+        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    LOGGER.warning("tabletka.by: SSL verify disabled (portable/Windows CA fallback)")
 
 
 def _parse_int(text: str) -> int | None:
@@ -95,7 +140,7 @@ def _get_with_retries(
     url: str,
     *,
     params: dict[str, Any] | None = None,
-    timeout: int = 25,
+    timeout: int = 20,
     attempts: int = 3,
 ) -> requests.Response | None:
     last_error: Exception | None = None
@@ -107,8 +152,11 @@ def _get_with_retries(
         except requests.RequestException as exc:
             last_error = exc
             LOGGER.warning("tabletka request failed (%s/%s) %s: %s", attempt, attempts, url, exc)
+            if _is_ssl_error(exc) and session.verify is not False:
+                _disable_verify(session)
+                continue
             if attempt < attempts:
-                time.sleep(0.6 * attempt)
+                time.sleep(0.4 * attempt)
     if last_error:
         LOGGER.warning("tabletka request exhausted retries for %s: %s", url, last_error)
     return None
@@ -245,11 +293,20 @@ def _unique_queries(query: str, aliases: Iterable[str] | None = None) -> list[st
     return values
 
 
+def _status_from_count(count: int) -> tuple[str, str]:
+    if count >= 5:
+        return "good", "Есть"
+    if count >= 1:
+        return "low", "Мало"
+    return "none", "Нет"
+
+
 def check_availability_minsk(
     query: str,
     aliases: Iterable[str] | None = None,
     *,
     session: requests.Session | None = None,
+    refine_minsk: bool = True,
 ) -> MinskAvailability:
     own_session = session is None
     session = session or _session()
@@ -278,67 +335,64 @@ def check_availability_minsk(
                 message="На tabletka.by ничего не найдено или сайт недоступен.",
             )
 
-        # Один лучший оффер + запасной — меньше запросов, меньше таймаутов.
-        minsk_total = 0
-        saw_result_page = False
-        serialized = []
-        for offer in offers[:2]:
-            minsk = count_minsk_pharmacies(offer.result_id, session=session) if offer.result_id else None
-            if minsk is None:
-                serialized.append(
-                    {
-                        "name": offer.name,
-                        "form": offer.form,
-                        "pharmacies_total": offer.pharmacies_total,
-                        "pharmacies_minsk": None,
-                        "result_id": offer.result_id,
-                        "url": offer.url,
-                    }
-                )
-                continue
-            saw_result_page = True
-            minsk_total = max(minsk_total, minsk)
-            serialized.append(
-                {
-                    "name": offer.name,
-                    "form": offer.form,
-                    "pharmacies_total": offer.pharmacies_total,
-                    "pharmacies_minsk": minsk,
-                    "result_id": offer.result_id,
-                    "url": offer.url,
-                }
-            )
-            if minsk_total >= 5:
-                break
+        rb_total = max((offer.pharmacies_total or 0) for offer in offers)
+        serialized = [
+            {
+                "name": offer.name,
+                "form": offer.form,
+                "pharmacies_total": offer.pharmacies_total,
+                "pharmacies_minsk": None,
+                "result_id": offer.result_id,
+                "url": offer.url,
+            }
+            for offer in offers[:3]
+        ]
 
-        if minsk_total >= 5:
-            status, label = "good", "Есть"
-        elif minsk_total >= 1:
-            status, label = "low", "Мало"
-        elif not saw_result_page:
-            # Поиск сработал, но страницы аптек не открылись — это не «нет в Минске».
+        minsk_total: int | None = None
+        if refine_minsk:
+            for offer in offers[:2]:
+                if not offer.result_id:
+                    continue
+                minsk = count_minsk_pharmacies(offer.result_id, session=session)
+                if minsk is None:
+                    continue
+                minsk_total = max(minsk_total or 0, minsk)
+                serialized[0 if offer is offers[0] else min(1, len(serialized) - 1)]["pharmacies_minsk"] = minsk
+                if minsk_total >= 5:
+                    break
+
+        if minsk_total is not None:
+            status, label = _status_from_count(minsk_total)
+            if status == "none" and rb_total > 0:
+                status, label = "none", "Нет в Минске"
             return MinskAvailability(
                 query=used_query,
-                status="unknown",
-                label="Нет данных",
-                pharmacies_minsk=0,
+                status=status,
+                label=label,
+                pharmacies_minsk=minsk_total,
                 offers=serialized,
-                message="Не удалось открыть страницы аптек tabletka.by.",
+                message=f"Минск: {minsk_total} аптек(и) по tabletka.by (region={MINSK_REGION_ID})",
             )
-        else:
-            rb = max((o.pharmacies_total or 0) for o in offers[:3])
-            if rb > 0:
-                status, label = "none", "Нет в Минске"
-            else:
-                status, label = "none", "Нет"
+
+        # Страница аптек не открылась — для справочника достаточно числа с поиска.
+        if rb_total > 0:
+            status, label = _status_from_count(rb_total)
+            return MinskAvailability(
+                query=used_query,
+                status=status,
+                label=label,
+                pharmacies_minsk=rb_total,
+                offers=serialized,
+                message=f"В Беларуси: {rb_total} аптек(и) по tabletka.by",
+            )
 
         return MinskAvailability(
             query=used_query,
-            status=status,
-            label=label,
-            pharmacies_minsk=minsk_total,
+            status="unknown",
+            label="Нет данных",
+            pharmacies_minsk=0,
             offers=serialized,
-            message=f"Минск: {minsk_total} аптек(и) по tabletka.by (region={MINSK_REGION_ID})",
+            message="Не удалось открыть страницы аптек tabletka.by.",
         )
     finally:
         if own_session:

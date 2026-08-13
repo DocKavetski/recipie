@@ -125,7 +125,12 @@ def build_daily_cache(
         session = _session()
 
         def wrapped(query, aliases=None):  # noqa: ANN001
-            return check_availability_minsk(query, aliases=aliases, session=session)
+            return check_availability_minsk(
+                query,
+                aliases=aliases,
+                session=session,
+                refine_minsk=False,
+            )
 
     try:
         for drug in drugs:
@@ -227,6 +232,53 @@ class DailyAvailabilityStore:
     def _worker_alive(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
 
+    def _start_worker(self, drugs: list[dict[str, Any]], force: bool) -> None:
+        """Настоящий OS-поток: после eel.start gevent патчит threading, и requests блокирует UI."""
+        thread_cls = threading.Thread
+        try:
+            from gevent import monkey
+
+            saved = getattr(monkey, "saved", {}).get("threading") or {}
+            if "Thread" in saved:
+                thread_cls = saved["Thread"]
+        except Exception:
+            pass
+        self._thread = thread_cls(
+            target=self._refresh,
+            args=(list(drugs), bool(force)),
+            daemon=True,
+            name="availability-daily",
+        )
+        self._thread.start()
+
+    def _probe_first(self, drugs: list[dict[str, Any]]) -> None:
+        """Синхронно проверяем 1 препарат, чтобы UI сразу увидел данные или ошибку связи."""
+        sample = [drug for drug in drugs if str(drug.get("russian_name") or drug.get("mnn") or "").strip()][:1]
+        if not sample:
+            self._cache["message"] = "Каталог пуст — нечего проверять."
+            return
+        try:
+            probe = build_daily_cache(sample, checker=self.checker)
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.exception("Availability probe failed")
+            with self._lock:
+                self._cache["message"] = f"Не удалось связаться с tabletka.by: {exc}"
+            return
+        with self._lock:
+            if has_useful_rows(probe):
+                self._cache = {
+                    "date": probe.get("date") or today_key(),
+                    "rows": list(probe.get("rows") or []),
+                    "by_key": dict(probe.get("by_key") or {}),
+                    "message": "Связь с tabletka.by есть, проверяю остальные препараты…",
+                }
+                self._progress = {"done": 1, "total": max(len(drugs), 1)}
+                return
+            self._cache["message"] = (
+                probe.get("message")
+                or "Не удалось связаться с tabletka.by. Проверьте интернет."
+            )
+
     def ensure_today(self, drugs: list[dict[str, Any]], *, force: bool = False) -> dict[str, Any]:
         with self._lock:
             self._recover_dead_worker()
@@ -245,13 +297,10 @@ class DailyAvailabilityStore:
                 self._cache["message"] = "Принудительная проверка tabletka.by…"
             else:
                 self._cache["message"] = "Проверяю наличие на сегодня…"
-            self._thread = threading.Thread(
-                target=self._refresh,
-                args=(list(drugs), bool(force)),
-                daemon=True,
-                name="availability-daily",
-            )
-            self._thread.start()
+
+        # Вне замка: короткий синхронный пробный запрос, затем фон.
+        self._probe_first(list(drugs))
+        self._start_worker(list(drugs), bool(force))
         return self.snapshot()
 
     def _publish_progress(self, partial: dict[str, Any]) -> None:
@@ -271,8 +320,6 @@ class DailyAvailabilityStore:
         previous: dict[str, Any] = {}
         try:
             with self._lock:
-                if not force and is_fresh(self._cache) and has_useful_rows(self._cache):
-                    return
                 previous = {
                     "date": self._cache.get("date") or "",
                     "rows": list(self._cache.get("rows") or []),

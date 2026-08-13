@@ -25,6 +25,8 @@ python -m PyInstaller `
   --hidden-import gevent `
   --hidden-import geventwebsocket `
   --hidden-import engineio.async_drivers.gevent `
+  --hidden-import certifi `
+  --collect-data certifi `
   main.py
 
 # Keep local runtime data folder (empty-ish) next to exe
