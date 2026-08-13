@@ -28,6 +28,7 @@ def test_build_preview_context_uses_shared_rp_formatting():
     assert preview["unp"] == "123456789"
     assert preview["patient_name"] == "Иванов И.И."
     assert preview["birth_date"] == "02.01.1980"
+    assert preview["front_batches"][0][0][1] is None
     assert preview["front_batches"][0][0][0]["rp_lines"] == [
         "Escitaloprami 10 мг",
         "D.t.d. № 30 (тридцать) in tab.",

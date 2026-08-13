@@ -357,9 +357,21 @@ function openPrintPreview(state, pdfPath = "", preview = null) {
     const previewModel = normalizePreviewData(state, preview);
     const { stampHtml, todayLong, patientName, birthDate, doctorName, frontBatches, backFilledBatches, duplexBackSlot, unp } = previewModel;
 
-    function renderDrugCell(drug) {
+    function renderDrugCell(drug, options = {}) {
         if (!drug) {
-            return "";
+            if (!options.voidIfEmpty) {
+                return "";
+            }
+            return `
+                <div class="rx-void" title="Поле закрыто символом Ƶ — дописывать нельзя" aria-label="Пустое поле закрыто">
+                    <svg class="rx-void-mark" viewBox="0 0 120 56" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                        <g fill="none" stroke="#222" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 8 H110 L10 48 H110" stroke-width="5.2"></path>
+                            <path d="M16 28 H104" stroke-width="4.2"></path>
+                        </g>
+                    </svg>
+                </div>
+            `;
         }
         const lines = Array.isArray(drug.rp_lines) ? drug.rp_lines : [];
         return `
@@ -416,7 +428,7 @@ function openPrintPreview(state, pdfPath = "", preview = null) {
                 </tr>
                 <tr class="h-r4">
                   <td class="rx-label middle">Rp:</td>
-                  <td colspan="2" class="rx">${renderDrugCell(d1)}</td>
+                  <td colspan="2" class="rx">${renderDrugCell(d1, { voidIfEmpty: Boolean(d0) })}</td>
                 </tr>
                 <tr class="h-r5">
                   <td class="rx-label middle">Rp:</td>
