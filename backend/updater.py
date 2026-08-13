@@ -67,6 +67,32 @@ def _version_tuple(value: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
+def _version_is_newer(remote: str, local: str) -> bool:
+    remote_t = _version_tuple(remote)
+    local_t = _version_tuple(local)
+    if remote_t and local_t:
+        return remote_t > local_t
+    remote_s = str(remote or "").strip()
+    local_s = str(local or "").strip()
+    return bool(remote_s and remote_s != local_s)
+
+
+def _pick_newer_version(*values: str | None) -> str:
+    best = ""
+    best_t: tuple[int, ...] = ()
+    for value in values:
+        text = str(value or "").strip().lstrip("v")
+        if not text:
+            continue
+        tup = _version_tuple(text)
+        if tup and (not best_t or tup > best_t):
+            best = text
+            best_t = tup
+        elif not best_t and text and not best:
+            best = text
+    return best
+
+
 def _http_json(url: str, timeout: int = 20) -> Any:
     request = Request(
         url,
@@ -78,11 +104,8 @@ def _http_json(url: str, timeout: int = 20) -> Any:
     try:
         with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
             return json.loads(response.read().decode("utf-8"))
-    except ssl.SSLError as exc:
-        # Последний fallback для окружений без CA-сертификатов.
-        # Апдейтеру нужно уметь обновляться даже в таких системах.
-        msg = str(exc).lower()
-        if "certificate verify failed" in msg or "local issuer certificate" in msg or "unable to get local issuer certificate" in msg:
+    except Exception as exc:  # noqa: BLE001
+        if _is_ssl_verify_error(exc):
             with urlopen(request, timeout=timeout, context=_ssl_unverified_context()) as response:
                 return json.loads(response.read().decode("utf-8"))
         raise
@@ -93,12 +116,29 @@ def _http_bytes(url: str, timeout: int = 60) -> bytes:
     try:
         with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
             return response.read()
-    except ssl.SSLError as exc:
-        msg = str(exc).lower()
-        if "certificate verify failed" in msg or "local issuer certificate" in msg or "unable to get local issuer certificate" in msg:
+    except Exception as exc:  # noqa: BLE001
+        if _is_ssl_verify_error(exc):
             with urlopen(request, timeout=timeout, context=_ssl_unverified_context()) as response:
                 return response.read()
         raise
+
+
+def _is_ssl_verify_error(exc: BaseException) -> bool:
+    messages = [str(exc)]
+    current: BaseException | None = exc
+    seen = 0
+    while current is not None and seen < 5:
+        messages.append(str(current))
+        current = current.__cause__ or current.__context__
+        seen += 1
+    blob = " ".join(messages).lower()
+    return (
+        isinstance(exc, ssl.SSLError)
+        or "certificate verify failed" in blob
+        or "local issuer certificate" in blob
+        or "unable to get local issuer certificate" in blob
+        or "ssl: certificate_verify_failed" in blob
+    )
 
 
 def _ssl_context() -> ssl.SSLContext | None:
@@ -301,6 +341,12 @@ def latest_release_asset() -> dict[str, Any] | None:
 def _friendly_update_error(exc: Exception) -> str:
     text = str(exc)
     lowered = text.lower()
+    if _is_ssl_verify_error(exc) or "certificate" in lowered:
+        return (
+            "Не удалось проверить обновления из‑за SSL/сертификатов. "
+            f"Скачайте вручную: {GITHUB_URL}/releases/latest "
+            f"({exc})"
+        )
     if "rate limit" in lowered or ("403" in text and "github" in lowered):
         return (
             "GitHub временно ограничил частоту запросов (rate limit). "
@@ -338,14 +384,19 @@ def get_update_status() -> dict[str, Any]:
         "mode": mode,
         "release_asset": None,
         "message": "Актуальная версия.",
+        "manual_download_url": f"{GITHUB_URL}/releases/latest",
     }
 
-    remote_version = remote_version_file() or ""
+    check_errors: list[str] = []
+    remote_version = ""
+    try:
+        remote_version = remote_version_file() or ""
+    except Exception as exc:  # noqa: BLE001
+        check_errors.append(str(exc))
+        LOGGER.warning("remote VERSION failed: %s", exc)
     status["remote_version"] = remote_version or None
     remote_sha = ""
 
-    # Для portable/runtime-zip не требуем API-коммиты: VERSION из raw обычно достаточно
-    # и не упирается в лимиты API.
     if is_git_checkout():
         try:
             remote = remote_head_commit()
@@ -355,34 +406,43 @@ def get_update_status() -> dict[str, Any]:
             status["remote_date"] = remote.get("date") or ""
         except Exception as exc:  # noqa: BLE001
             LOGGER.warning("update check failed via commit endpoint: %s", exc)
+            check_errors.append(str(exc))
             if not remote_version:
                 status["ok"] = False
                 status["message"] = _friendly_update_error(exc)
                 return status
 
-    if not is_frozen() and not is_git_checkout():
-        release = latest_release_asset()
+    # Portable/zip: релизы — основной источник версии и файла обновления.
+    if not is_git_checkout():
+        try:
+            release = latest_release_asset()
+        except Exception as exc:  # noqa: BLE001
+            release = None
+            check_errors.append(str(exc))
+            LOGGER.warning("latest release lookup failed: %s", exc)
         if release:
             status["release_asset"] = release
             release_tag = str(release.get("tag") or "").strip()
-            if release_tag:
-                # Не даём старому ReleaseTag занижать более новую VERSION в main.
-                current_remote = _version_tuple(remote_version)
-                release_remote = _version_tuple(release_tag)
-                if (not current_remote and release_remote) or (release_remote and release_remote > current_remote):
-                    remote_version = release_tag
-                    status["remote_version"] = remote_version
+            remote_version = _pick_newer_version(remote_version, release_tag)
+            status["remote_version"] = remote_version or None
 
     if local_sha and remote_sha and is_git_checkout():
         status["update_available"] = local_sha[:12] != remote_sha[:12]
     elif remote_version:
-        status["update_available"] = remote_version != local_version
+        status["update_available"] = _version_is_newer(remote_version, local_version)
     else:
         status["update_available"] = False
+        if check_errors:
+            status["ok"] = False
+            status["message"] = _friendly_update_error(RuntimeError(check_errors[0]))
+            return status
 
     if status["update_available"]:
         shown = remote_version or (remote_sha[:7] if remote_sha else "новая")
-        status["message"] = f"Доступно обновление: {shown}"
+        status["message"] = (
+            f"Доступно обновление: {shown}. "
+            f"Если кнопка не сработает — скачайте вручную: {GITHUB_URL}/releases/latest"
+        )
     else:
         status["message"] = f"Установлена актуальная версия {local_version}"
 
@@ -579,10 +639,17 @@ def apply_update() -> dict[str, Any]:
         if is_git_checkout():
             details = _apply_git_update()
         elif is_frozen():
-            # Portable: не перезаписываем запущенный Recepty.exe.
-            # Кладём свежие backend/web/VERSION рядом с exe (см. bootstrap в main.py).
-            details = _apply_zip_update()
-            details = {**details, "method": "frozen-overlay"}
+            # Portable: сначала релизный zip (backend/web/VERSION рядом с exe),
+            # exe не трогаем. Если релиза нет — исходники с main.
+            asset = before.get("release_asset") if isinstance(before.get("release_asset"), dict) else None
+            if not asset or not asset.get("url"):
+                asset = latest_release_asset()
+            if asset and asset.get("url"):
+                details = _apply_release_zip_update(asset, replace_exe=False)
+                details = {**details, "method": "frozen-release-overlay"}
+            else:
+                details = _apply_zip_update()
+                details = {**details, "method": "frozen-overlay"}
         elif before.get("release_asset") and before["release_asset"].get("url"):
             details = _apply_release_zip_update(before["release_asset"], replace_exe=True)
         else:

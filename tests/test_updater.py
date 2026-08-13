@@ -68,6 +68,7 @@ def test_get_update_status_without_commit_api_for_non_git(monkeypatch):
     monkeypatch.setattr(updater, "is_frozen", lambda: True)
     monkeypatch.setattr(updater, "read_local_version", lambda: "1.1.12")
     monkeypatch.setattr(updater, "remote_version_file", lambda: "1.1.13")
+    monkeypatch.setattr(updater, "latest_release_asset", lambda: None)
     monkeypatch.setattr(
         updater,
         "remote_head_commit",
@@ -80,7 +81,36 @@ def test_get_update_status_without_commit_api_for_non_git(monkeypatch):
     assert status["remote_version"] == "1.1.13"
 
 
-def test_frozen_update_uses_overlay(monkeypatch, tmp_path):
+def test_frozen_status_uses_release_when_version_file_fails(monkeypatch):
+    monkeypatch.setattr(updater, "is_git_checkout", lambda: False)
+    monkeypatch.setattr(updater, "is_frozen", lambda: True)
+    monkeypatch.setattr(updater, "read_local_version", lambda: "1.1.41")
+    monkeypatch.setattr(updater, "remote_version_file", lambda: None)
+    monkeypatch.setattr(
+        updater,
+        "latest_release_asset",
+        lambda: {
+            "tag": "1.1.48",
+            "name": "Recepty-portable.zip",
+            "url": "https://github.com/example/recepty.zip",
+            "size": 1,
+        },
+    )
+    status = updater.get_update_status()
+    assert status["ok"] is True
+    assert status["update_available"] is True
+    assert status["remote_version"] == "1.1.48"
+    assert status["release_asset"]["name"] == "Recepty-portable.zip"
+
+
+def test_version_compare_uses_numeric_order():
+    assert updater._version_is_newer("1.1.48", "1.1.41") is True
+    assert updater._version_is_newer("1.1.41", "1.1.48") is False
+    assert updater._version_is_newer("1.1.48", "1.1.48") is False
+    assert updater._pick_newer_version("1.1.41", "1.1.48", None) == "1.1.48"
+
+
+def test_frozen_update_prefers_release_overlay(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr(updater, "is_git_checkout", lambda: False)
@@ -103,13 +133,34 @@ def test_frozen_update_uses_overlay(monkeypatch, tmp_path):
     monkeypatch.setattr(
         updater,
         "_apply_release_zip_update",
-        lambda *_args, **_kwargs: calls.append("release") or {"method": "release"},
+        lambda *_args, **_kwargs: calls.append("release") or {"method": "release-zip"},
     )
     monkeypatch.setattr(updater, "read_local_version", lambda: "1.1.2")
 
     result = updater.apply_update()
     assert result["ok"] is True
     assert result["updated"] is True
+    assert calls == ["release"]
+    assert result["details"]["method"] == "frozen-release-overlay"
+
+
+def test_frozen_update_falls_back_to_source_zip(monkeypatch):
+    calls = []
+    monkeypatch.setattr(updater, "is_git_checkout", lambda: False)
+    monkeypatch.setattr(updater, "is_frozen", lambda: True)
+    monkeypatch.setattr(
+        updater,
+        "get_update_status",
+        lambda: {"ok": True, "update_available": True, "message": "upd", "release_asset": None},
+    )
+    monkeypatch.setattr(updater, "latest_release_asset", lambda: None)
+    monkeypatch.setattr(
+        updater,
+        "_apply_zip_update",
+        lambda: calls.append("zip") or {"method": "zip"},
+    )
+    monkeypatch.setattr(updater, "read_local_version", lambda: "1.1.2")
+    result = updater.apply_update()
     assert calls == ["zip"]
     assert result["details"]["method"] == "frozen-overlay"
 
