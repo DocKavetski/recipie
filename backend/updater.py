@@ -29,6 +29,7 @@ PROTECTED_DATA = {
     "app.db",
     "autosave.json",
     "settings.json",
+    "availability_cache.json",
 }
 CODE_DIRS = ("backend", "web", "tests", "scripts")
 CODE_FILES = (
