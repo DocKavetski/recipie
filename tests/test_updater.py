@@ -58,6 +58,66 @@ def test_friendly_permission_error():
     assert "recepty.exe" in message.lower() or "доступ" in message.lower()
 
 
+def test_friendly_access_denied_winerror():
+    message = updater._friendly_update_error(OSError(5, "Access is denied"))
+    assert "доступ" in message.lower() or "releases/latest" in message.lower()
+
+
+def test_is_access_error_variants():
+    assert updater._is_access_error(PermissionError("x"))
+    assert updater._is_access_error(OSError(13, "Permission denied"))
+    err = OSError("Access is denied")
+    err.winerror = 5
+    assert updater._is_access_error(err)
+    assert not updater._is_access_error(RuntimeError("offline"))
+
+
+def test_frozen_overlay_skips_internal(tmp_path, monkeypatch):
+    source = tmp_path / "release"
+    root = tmp_path / "install"
+    source.mkdir()
+    root.mkdir()
+    (source / "_internal").mkdir()
+    (source / "_internal" / "locked.dll").write_bytes(b"dll")
+    (source / "Recepty.exe").write_bytes(b"exe")
+    (source / "VERSION").write_text("1.1.54\n", encoding="utf-8")
+    (source / "backend").mkdir()
+    (source / "backend" / "version.py").write_text("APP_VERSION='1.1.54'\n", encoding="utf-8")
+    (source / "web").mkdir()
+    (source / "web" / "index.html").write_text("<html></html>", encoding="utf-8")
+    (source / "_internal" / "web").mkdir()
+    (source / "_internal" / "web" / "old.html").write_text("old", encoding="utf-8")
+
+    # Simulate locked _internal destination that must not be touched.
+    (root / "_internal").mkdir()
+    locked = root / "_internal" / "locked.dll"
+    locked.write_bytes(b"old-dll")
+
+    updated = updater._apply_frozen_overlay_from_source(source, root)
+    assert "backend" in updated
+    assert "web" in updated
+    assert "VERSION" in updated
+    assert (root / "VERSION").read_text(encoding="utf-8").startswith("1.1.54")
+    assert (root / "backend" / "version.py").exists()
+    assert (root / "web" / "index.html").exists()
+    assert not (root / "web" / "old.html").exists()
+    assert locked.read_bytes() == b"old-dll"
+    assert not (root / "Recepty.exe").exists()
+
+
+def test_frozen_overlay_uses_internal_web_fallback(tmp_path):
+    source = tmp_path / "release"
+    root = tmp_path / "install"
+    source.mkdir()
+    root.mkdir()
+    (source / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+    (source / "_internal" / "web").mkdir(parents=True)
+    (source / "_internal" / "web" / "index.html").write_text("from-internal", encoding="utf-8")
+    updated = updater._apply_frozen_overlay_from_source(source, root)
+    assert "web" in updated
+    assert (root / "web" / "index.html").read_text(encoding="utf-8") == "from-internal"
+
+
 def test_friendly_rate_limit_error():
     message = updater._friendly_update_error(RuntimeError("HTTP Error 403: rate limit exceeded"))
     assert "rate limit" in message.lower() or "ограничил" in message.lower()

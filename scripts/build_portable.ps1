@@ -33,6 +33,12 @@ Copy-Item "data\seed_drugs_from_protocols.json" "dist\$name\data\" -Force
 Copy-Item "data\archived_drugs.json" "dist\$name\data\" -Force
 Copy-Item "VERSION" "dist\$name\" -Force
 
+# Overlay для live-update: backend/web рядом с exe (без перезаписи занятого _internal)
+if (Test-Path "dist\$name\backend") { Remove-Item "dist\$name\backend" -Recurse -Force }
+if (Test-Path "dist\$name\web") { Remove-Item "dist\$name\web" -Recurse -Force }
+Copy-Item "backend" "dist\$name\backend" -Recurse -Force
+Copy-Item "web" "dist\$name\web" -Recurse -Force
+
 # Zip for GitHub Release
 $zipPath = "dist\Recepty-portable.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
