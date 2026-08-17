@@ -81,6 +81,10 @@ class TestPatientName:
         assert format_name_with_initials("Иванов И.Р.") == "Иванов И.Р."
         assert format_name_with_initials("Иванов И. Р.") == "Иванов И.Р."
         assert format_name_with_initials("Сидоров С.Р.") == "Сидоров С.Р."
+        assert format_name_with_initials("Иванова Анна Руслановна") == "Иванова А.Р."
+        assert format_name_with_initials("Иванова А.Р.") == "Иванова А.Р."
+        assert format_name_with_initials("Петров Петр Ромуальдович") == "Петров П.Р."
+        assert format_name_with_initials("Петров П.Р.") == "Петров П.Р."
 
     def test_gr_initials_not_treated_as_birth_year(self):
         assert format_name_with_initials("Иванов Г.Р.") == "Иванов Г.Р."
@@ -91,6 +95,8 @@ class TestPatientName:
             "Иванов Иван Иванович",
             "Иванов Иван Романович",
             "Иванов Григорий Романович",
+            "Иванова Анна Руслановна",
+            "Петров Петр Ромуальдович",
             "Дубяго К.А.",
             "Салтыков-Щедрин Михаил Евграфович",
         ]
@@ -145,6 +151,17 @@ class TestParsePatientSmartInput:
         parsed = parse_patient_smart_input("Иванов И.Р. 12.05.1977")
         assert parsed.patient_name == "Иванов И.Р."
         assert parsed.birth_date == "12.05.1977"
+
+    def test_ruslanovna_and_romualdovich(self):
+        rus = parse_patient_smart_input("Сидорова Мария Руслановна 01.02.1990")
+        assert rus.patient_name == "Сидорова М.Р."
+        assert rus.birth_date == "01.02.1990"
+        assert format_name_with_initials(rus.patient_name) == "Сидорова М.Р."
+
+        rom = parse_patient_smart_input("Козлов Иван Ромуальдович 12.05.1977")
+        assert rom.patient_name == "Козлов И.Р."
+        assert rom.birth_date == "12.05.1977"
+        assert format_name_with_initials(rom.patient_name) == "Козлов И.Р."
 
     def test_compose_roundtrip(self):
         value = compose_patient_smart_value("Иванов П.С.", "27.08.2000", "112567")
