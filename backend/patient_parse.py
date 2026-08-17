@@ -127,13 +127,34 @@ def capitalize_person_word(word: str) -> str:
     return value[:1].upper() + value[1:]
 
 
+_NAME_CHAR = r"A-Za-zА-Яа-яЁё"
+
+
+def _strip_birth_year_markers(value: str) -> str:
+    """Убирает пометки года рождения, не трогая инициалы вроде И.Р. / Г.Р.
+
+    Раньше шаблон ``г.р.|р.`` с ``IGNORECASE`` съедал букву отчества Р
+    (Романович и т.п.) при повторном форматировании перед печатью:
+    «Иванов И.Р.» → «Иванов И.».
+    """
+    # Только строчная «г.р.» — заглавные «Г.Р.» это инициалы.
+    value = re.sub(rf"(^|[^{_NAME_CHAR}])г\.\s*р\.?(?![{_NAME_CHAR}])", r"\1 ", value)
+    value = re.sub(
+        rf"(^|[^{_NAME_CHAR}])года?(?![{_NAME_CHAR}])",
+        r"\1 ",
+        value,
+        flags=re.IGNORECASE,
+    )
+    return value
+
+
 def clean_patient_name_text(text: str) -> str:
     value = str(text or "")
     value = re.sub(r"\([^)]*\)?", " ", value)
     value = re.sub(r"\[[^\]]*\]?", " ", value)
     value = re.sub(r"[()[\]{}<>«»\"'`´]", " ", value)
     value = re.sub(r"[,;|·•]+", " ", value)
-    value = re.sub(r"\b(?:г\.?р\.?|года?|р\.?)\b", " ", value, flags=re.IGNORECASE)
+    value = _strip_birth_year_markers(value)
     value = re.sub(r"\s+", " ", value).strip(" .,;:/-–—")
     return value.strip()
 

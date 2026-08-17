@@ -76,6 +76,28 @@ class TestPatientName:
     def test_only_surname(self):
         assert format_name_with_initials("Иванов") == "Иванов"
 
+    def test_patronymic_initial_r_kept(self):
+        assert format_name_with_initials("Иванов Иван Романович") == "Иванов И.Р."
+        assert format_name_with_initials("Иванов И.Р.") == "Иванов И.Р."
+        assert format_name_with_initials("Иванов И. Р.") == "Иванов И.Р."
+        assert format_name_with_initials("Сидоров С.Р.") == "Сидоров С.Р."
+
+    def test_gr_initials_not_treated_as_birth_year(self):
+        assert format_name_with_initials("Иванов Г.Р.") == "Иванов Г.Р."
+        assert format_name_with_initials("Иванов Григорий Романович") == "Иванов Г.Р."
+
+    def test_format_initials_is_idempotent(self):
+        names = [
+            "Иванов Иван Иванович",
+            "Иванов Иван Романович",
+            "Иванов Григорий Романович",
+            "Дубяго К.А.",
+            "Салтыков-Щедрин Михаил Евграфович",
+        ]
+        for name in names:
+            once = format_name_with_initials(name)
+            assert format_name_with_initials(once) == once
+
 
 class TestParsePatientSmartInput:
     def test_basic(self):
@@ -112,6 +134,17 @@ class TestParsePatientSmartInput:
         parsed = parse_patient_smart_input("Иванов, Петр, г.р. 27.08.2000")
         assert parsed.patient_name == "Иванов П."
         assert parsed.birth_date == "27.08.2000"
+
+    def test_romanovich_initials_with_date(self):
+        parsed = parse_patient_smart_input("Иванов Иван Романович 12.05.1977")
+        assert parsed.patient_name == "Иванов И.Р."
+        assert parsed.birth_date == "12.05.1977"
+        assert format_name_with_initials(parsed.patient_name) == "Иванов И.Р."
+
+    def test_already_formatted_r_patronymic_with_date(self):
+        parsed = parse_patient_smart_input("Иванов И.Р. 12.05.1977")
+        assert parsed.patient_name == "Иванов И.Р."
+        assert parsed.birth_date == "12.05.1977"
 
     def test_compose_roundtrip(self):
         value = compose_patient_smart_value("Иванов П.С.", "27.08.2000", "112567")
@@ -386,3 +419,29 @@ class TestPdfSmoke:
         path = generate_prescription_pdf(payload, tmp_path, stamp)
         assert path.exists()
         assert path.stat().st_size > 1000
+
+    def test_pdf_keeps_patronymic_initial_r(self, tmp_path):
+        from pypdf import PdfReader
+
+        from backend.pdf_gen import generate_prescription_pdf
+
+        payload = {
+            "patient_name": "Иванов Иван Романович",
+            "birth_date": "12.05.1977",
+            "doctor_name": "Кавецкий А.С.",
+            "drugs": [
+                {
+                    "mnn": "Escitalopram",
+                    "latin_name": "Escitalopramum",
+                    "drug_form": "Tab.",
+                    "dosage": "10 мг",
+                    "dispenseQty": 30,
+                    "selectedScheme": "по 1 таблетке утром",
+                    "mode": "mnn",
+                }
+            ],
+        }
+        path = generate_prescription_pdf(payload, tmp_path, "ООО Тест")
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
+        compact = text.replace(" ", "").replace("\n", "")
+        assert "ИвановИ.Р." in compact
