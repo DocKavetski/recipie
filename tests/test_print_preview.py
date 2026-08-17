@@ -36,3 +36,29 @@ def test_build_preview_context_uses_shared_rp_formatting():
     ]
     assert preview["back_filled_batches"][0] == [True, False, False, False]
     assert preview["duplex_back_slot"] == [1, 0, 3, 2]
+
+
+def test_preview_keeps_patronymic_initial_r():
+    preview = build_preview_context(
+        {
+            "patient_name": "Иванов Иван Романович",
+            "birth_date": "12.05.1977",
+            "doctor_name": "Кавецкий А.С.",
+            "drugs": [],
+        },
+        "Строка 1",
+        "123",
+    )
+    assert preview["patient_name"] == "Иванов И.Р."
+
+    again = build_preview_context(
+        {
+            "patient_name": preview["patient_name"],
+            "birth_date": "12.05.1977",
+            "doctor_name": "Кавецкий А.С.",
+            "drugs": [],
+        },
+        "Строка 1",
+        "123",
+    )
+    assert again["patient_name"] == "Иванов И.Р."
