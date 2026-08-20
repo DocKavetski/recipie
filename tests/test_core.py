@@ -437,6 +437,22 @@ class TestPdfSmoke:
         assert path.exists()
         assert path.stat().st_size > 1000
 
+    def test_void_z_mark_fits_inside_cell(self):
+        from reportlab.lib.units import mm
+
+        from backend.pdf_gen import void_z_mark_box
+
+        x, y, w, h = 10 * mm, 20 * mm, 78 * mm, 22.5 * mm
+        left, bottom, right, top = void_z_mark_box(x, y, w, h)
+        assert left >= x
+        assert right <= x + w
+        assert bottom >= y
+        assert top <= y + h
+        assert (right - left) <= w * 0.5 + 0.01
+        assert (top - bottom) <= h * 0.45 + 0.01
+        assert (right - left) <= 34 * mm + 0.01
+        assert (top - bottom) <= 9 * mm + 0.01
+
     def test_pdf_keeps_patronymic_initial_r(self, tmp_path):
         from pypdf import PdfReader
 
