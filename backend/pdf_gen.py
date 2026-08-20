@@ -102,15 +102,20 @@ def _draw_cell(pdf: canvas.Canvas, x: float, y: float, w: float, h: float) -> No
     pdf.rect(x, y, w, h)
 
 
+def void_z_mark_box(x: float, y: float, w: float, h: float) -> tuple[float, float, float, float]:
+    """Компактный прямоугольник Ƶ по центру ячейки (left, bottom, right, top)."""
+    mark_w = min(w * 0.48, 34 * mm)
+    mark_h = min(h * 0.42, 9 * mm)
+    left = x + (w - mark_w) / 2
+    bottom = y + (h - mark_h) / 2
+    return left, bottom, left + mark_w, bottom + mark_h
+
+
 def _draw_void_z(pdf: canvas.Canvas, x: float, y: float, w: float, h: float) -> None:
     """Символ закрытия поля Ƶ (Z со штрихом): пустую строку нельзя дописать."""
-    pad_x = 4 * mm
-    pad_y = 3.2 * mm
-    left = x + pad_x
-    right = x + w - pad_x
-    top = y + h - pad_y
-    bottom = y + pad_y
+    left, bottom, right, top = void_z_mark_box(x, y, w, h)
     mid_y = (top + bottom) / 2
+    inset = min(1.0 * mm, (right - left) * 0.06)
     pdf.saveState()
     pdf.setStrokeColorRGB(0.2, 0.2, 0.2)
     pdf.setLineCap(1)
@@ -120,7 +125,7 @@ def _draw_void_z(pdf: canvas.Canvas, x: float, y: float, w: float, h: float) -> 
     pdf.line(right, top, left, bottom)
     pdf.line(left, bottom, right, bottom)
     pdf.setLineWidth(0.35)
-    pdf.line(left + 1.2 * mm, mid_y, right - 1.2 * mm, mid_y)
+    pdf.line(left + inset, mid_y, right - inset, mid_y)
     pdf.restoreState()
 
 

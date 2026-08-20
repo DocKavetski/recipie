@@ -263,23 +263,30 @@ table.form tr:last-child td {
 .rx {
   font-size: 10px;
   line-height: 1.15;
+  position: relative;
+  overflow: hidden;
 }
 
 .rx .drug { font-size: 11px; }
 .rx .sig-small { font-size: 9px; }
 
+/* Абсолютно внутри ячейки — без min-height, иначе строка Rp раздувается и низ бланка пропадает. */
 .rx-void {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    min-height: 16mm;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
 }
 
 .rx-void-mark {
-    display: block;
-    width: 88%;
-    height: 78%;
-    margin: 1.5mm auto 0;
+  display: block;
+  width: 48%;
+  height: 42%;
+  max-width: 34mm;
+  max-height: 9mm;
+  margin: 0;
 }
 
 .sign-block {
