@@ -2782,6 +2782,7 @@ function bindManualDrugControls() {
                 const result = await window.eel.add_drug_from_tabletka(query)();
                 await loadCatalogFromBackend();
                 renderDirectoryTable();
+                renderSchemeEditorTable();
                 if (queryInput) {
                     queryInput.value = "";
                 }
@@ -2832,6 +2833,7 @@ function bindManualDrugControls() {
                 await window.eel.delete_custom_drug(mnn)();
                 await loadCatalogFromBackend();
                 renderDirectoryTable();
+                renderSchemeEditorTable();
                 setStatus(`Препарат «${mnn}» удалён из каталога.`);
             } catch (error) {
                 console.error(error);
@@ -2985,6 +2987,7 @@ async function initPrototype() {
     bindDoctorControls();
     bindGlobalDrugSearch();
     bindTemplateDrugSearch();
+    bindSchemeEditorControls();
     bindManualDrugControls();
     bindUpdateControls();
     await loadPrintBlankCss();
@@ -2994,6 +2997,7 @@ async function initPrototype() {
     await bindTemplateManagerControls();
     clearTemplateEditor();
     renderDirectoryTable();
+    renderSchemeEditorTable();
     await loadArchivedDrugsFromBackend();
     const startupUpdateStatus = await refreshUpdateStatus({ silent: true });
     await maybeAutoApplyStartupUpdate(startupUpdateStatus);

@@ -30,6 +30,9 @@ def test_initialize_registers_parse_treatment(tmp_path: Path, monkeypatch):
     assert "add_drug_from_tabletka" in exposed
     assert "upsert_custom_drug" in exposed
     assert "delete_custom_drug" in exposed
+    assert "list_drug_schemes" in exposed
+    assert "save_drug_schemes" in exposed
+    assert "reset_drug_schemes" in exposed
     assert "ensure_daily_availability" in exposed
     assert "get_daily_availability" in exposed
     assert "refresh_catalog_availability" in exposed
@@ -38,6 +41,13 @@ def test_initialize_registers_parse_treatment(tmp_path: Path, monkeypatch):
     assert result["drugs"][0]["mnn"] == "Escitalopram"
     archived = exposed["get_archived_drugs"]()
     assert any(item["mnn"] == "Vilazodone" for item in archived)
+    saved = exposed["save_drug_schemes"]("Escitalopram", ["по 1 таблетке утром"])
+    assert saved["ok"] is True
+    assert saved["scheme_options"] == ["по 1 таблетке утром"]
+    reset = exposed["reset_drug_schemes"]("Escitalopram")
+    assert reset["ok"] is True
+    assert reset["has_custom_scheme"] is False
+    assert reset["scheme_options"]
 
 
 def test_runtime_expose_add_drug_from_tabletka(tmp_path: Path, monkeypatch):
