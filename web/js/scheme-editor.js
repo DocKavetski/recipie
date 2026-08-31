@@ -1,0 +1,129 @@
+/** Вкладка «Схемы»: редактирование схем лечения по препаратам. */
+
+const schemeEditorSearch = document.getElementById("schemeEditorSearch");
+const schemeEditorTableBody = document.getElementById("schemeEditorTableBody");
+
+function schemeEditorMatches(drug, query) {
+    const normalizedQuery = normalizeText(query);
+    if (!normalizedQuery) {
+        return true;
+    }
+    const candidates = [
+        drug.mnn,
+        drug.russian_name,
+        drug.latin_name,
+        ...(drug.trade_names || []),
+        ...(drug.search_aliases || []),
+    ];
+    return candidates.some((candidate) => normalizeText(candidate).includes(normalizedQuery));
+}
+
+async function saveSchemeEditorRow(mnn, textarea, statusCell) {
+    const schemes = normalizeSchemeLines(String(textarea.value || "").split("\n"));
+    if (!schemes.length) {
+        setStatus("Введите хотя бы одну схему лечения.");
+        statusCell.textContent = "Пусто";
+        return;
+    }
+    if (!window.eel || typeof window.eel.save_drug_schemes !== "function") {
+        setStatus("Backend недоступен для сохранения схем.");
+        statusCell.textContent = "Нет backend";
+        return;
+    }
+    try {
+        const result = await window.eel.save_drug_schemes(mnn, schemes)();
+        const saved = result.scheme_options || schemes;
+        updateCatalogDrugSchemes(mnn, saved, true);
+        textarea.value = saved.join("\n");
+        statusCell.textContent = "Пользовательская";
+        setStatus(`Схемы для ${mnn} сохранены.`);
+    } catch (error) {
+        console.error(error);
+        statusCell.textContent = "Ошибка";
+        setStatus("Не удалось сохранить схемы лечения.");
+    }
+}
+
+async function resetSchemeEditorRow(drug, textarea, statusCell) {
+    if (!window.eel || typeof window.eel.reset_drug_schemes !== "function") {
+        setStatus("Backend недоступен для сброса схем.");
+        statusCell.textContent = "Нет backend";
+        return;
+    }
+    try {
+        const result = await window.eel.reset_drug_schemes(drug.mnn)();
+        let fallbackSchemes = result?.scheme_options;
+        if (!Array.isArray(fallbackSchemes)) {
+            const refreshed = typeof window.eel.search_catalog_drugs === "function"
+                ? await window.eel.search_catalog_drugs(drug.mnn)()
+                : [];
+            const current = Array.isArray(refreshed)
+                ? refreshed.find((item) => item.mnn === drug.mnn)
+                : null;
+            fallbackSchemes = current?.scheme_options || drug.scheme_options || [];
+        }
+        updateCatalogDrugSchemes(drug.mnn, fallbackSchemes, false);
+        textarea.value = normalizeSchemeLines(fallbackSchemes).join("\n");
+        statusCell.textContent = "Каталог";
+        setStatus(`Схемы для ${drug.mnn} сброшены к каталогу.`);
+        renderSchemeEditorTable();
+    } catch (error) {
+        console.error(error);
+        statusCell.textContent = "Ошибка";
+        setStatus("Не удалось сбросить схемы лечения.");
+    }
+}
+
+function renderSchemeEditorTable() {
+    if (!schemeEditorTableBody) {
+        return;
+    }
+    schemeEditorTableBody.innerHTML = "";
+    const query = schemeEditorSearch?.value || "";
+    const filtered = (catalogDrugs || []).filter((drug) => schemeEditorMatches(drug, query));
+    if (!filtered.length) {
+        const row = document.createElement("tr");
+        row.innerHTML = `<td colspan="5" class="text-muted">Ничего не найдено.</td>`;
+        schemeEditorTableBody.appendChild(row);
+        return;
+    }
+
+    for (const drug of filtered) {
+        const row = document.createElement("tr");
+        const schemes = normalizeSchemeLines(drug.scheme_options || []);
+        row.innerHTML = `
+            <td>
+                <div class="fw-semibold">${escapeHtml(drug.russian_name)}</div>
+                <div class="text-muted small">${escapeHtml(drug.mnn)}</div>
+            </td>
+            <td>${escapeHtml(drug.category || "")}</td>
+            <td>
+                <textarea class="form-control form-control-sm scheme-editor-textarea" rows="4" placeholder="Каждая схема с новой строки">${escapeHtml(schemes.join("\n"))}</textarea>
+            </td>
+            <td class="small scheme-editor-status">${drug.has_custom_scheme ? "Пользовательская" : "Каталог"}</td>
+            <td class="text-end">
+                <div class="d-flex gap-2 justify-content-end flex-wrap">
+                    <button class="btn btn-sm btn-primary scheme-save-btn" type="button">Сохранить</button>
+                    <button class="btn btn-sm btn-outline-secondary scheme-reset-btn" type="button">Сбросить</button>
+                </div>
+            </td>
+        `;
+        const textarea = row.querySelector(".scheme-editor-textarea");
+        const statusCell = row.querySelector(".scheme-editor-status");
+        row.querySelector(".scheme-save-btn").addEventListener("click", () => {
+            saveSchemeEditorRow(drug.mnn, textarea, statusCell);
+        });
+        row.querySelector(".scheme-reset-btn").addEventListener("click", () => {
+            resetSchemeEditorRow(drug, textarea, statusCell);
+        });
+        schemeEditorTableBody.appendChild(row);
+    }
+}
+
+function bindSchemeEditorControls() {
+    if (!schemeEditorSearch || schemeEditorSearch.dataset.bound) {
+        return;
+    }
+    schemeEditorSearch.addEventListener("input", () => renderSchemeEditorTable());
+    schemeEditorSearch.dataset.bound = "true";
+}

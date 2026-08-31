@@ -115,6 +115,8 @@ def test_custom_scheme_overrides_persist_across_sync(tmp_path: Path):
 
     reset = repo.reset_drug_schemes("Escitalopram")
     assert reset["ok"] is True
+    assert reset["has_custom_scheme"] is False
+    assert reset["scheme_options"] == original["scheme_options"]
     restored = next(item for item in repo.list_drugs() if item["mnn"] == "Escitalopram")
     assert restored["scheme_options"] == original["scheme_options"]
     assert restored["has_custom_scheme"] is False

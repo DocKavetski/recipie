@@ -494,9 +494,18 @@ class DrugRepository:
         if not key:
             raise ValueError("MNN is required.")
         with self._connect() as connection:
+            exists = connection.execute("SELECT 1 FROM drugs WHERE mnn = ?", (key,)).fetchone()
+            if not exists:
+                raise ValueError("Drug not found.")
             connection.execute("DELETE FROM custom_drug_schemes WHERE mnn = ?", (key,))
             connection.commit()
-        return {"ok": True, "mnn": key}
+        restored = next((item for item in self.list_drugs() if item["mnn"] == key), None)
+        return {
+            "ok": True,
+            "mnn": key,
+            "scheme_options": list((restored or {}).get("scheme_options") or []),
+            "has_custom_scheme": False,
+        }
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:

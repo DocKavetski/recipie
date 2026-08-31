@@ -50,10 +50,24 @@ def register_repository_exposes(repository: Any) -> None:
     def delete_custom_drug(mnn):
         return repository.delete_custom_drug(mnn or "")
 
+    @eel.expose
+    def list_drug_schemes():
+        return repository.list_drugs()
+
+    @eel.expose
+    def save_drug_schemes(mnn, scheme_options):
+        schemes = scheme_options if isinstance(scheme_options, list) else []
+        return repository.save_drug_schemes(mnn or "", schemes)
+
+    @eel.expose
+    def reset_drug_schemes(mnn):
+        return repository.reset_drug_schemes(mnn or "")
+
     _REGISTERED = True
     LOGGER.info(
         "Registered runtime Eel exposes: parse_treatment, get_archived_drugs, "
-        "upsert_custom_drug, add_drug_from_tabletka, delete_custom_drug"
+        "upsert_custom_drug, add_drug_from_tabletka, delete_custom_drug, "
+        "list_drug_schemes, save_drug_schemes, reset_drug_schemes"
     )
     register_availability_exposes(repository)
 
