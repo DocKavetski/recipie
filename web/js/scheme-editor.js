@@ -83,7 +83,7 @@ function renderSchemeEditorTable() {
     const filtered = (catalogDrugs || []).filter((drug) => schemeEditorMatches(drug, query));
     if (!filtered.length) {
         const row = document.createElement("tr");
-        row.innerHTML = `<td colspan="5" class="text-muted">Ничего не найдено.</td>`;
+        row.innerHTML = `<td colspan="6" class="text-muted">Ничего не найдено.</td>`;
         schemeEditorTableBody.appendChild(row);
         return;
     }
@@ -91,6 +91,8 @@ function renderSchemeEditorTable() {
     for (const drug of filtered) {
         const row = document.createElement("tr");
         const schemes = normalizeSchemeLines(drug.scheme_options || []);
+        const maxDose = String(drug.max_daily_dose || "по инструкции").trim() || "по инструкции";
+        const stopLabel = String(drug.discontinuation_label || "Желательна плавная отмена").trim();
         row.innerHTML = `
             <td>
                 <div class="fw-semibold">${escapeHtml(drug.russian_name)}</div>
@@ -99,6 +101,10 @@ function renderSchemeEditorTable() {
             <td>${escapeHtml(drug.category || "")}</td>
             <td>
                 <textarea class="form-control form-control-sm scheme-editor-textarea" rows="4" placeholder="Каждая схема с новой строки">${escapeHtml(schemes.join("\n"))}</textarea>
+            </td>
+            <td class="small scheme-editor-ref">
+                <div><span class="text-muted">Макс.:</span> ${escapeHtml(maxDose)}</div>
+                <div class="mt-1">${escapeHtml(stopLabel)}</div>
             </td>
             <td class="small scheme-editor-status">${drug.has_custom_scheme ? "Пользовательская" : "Каталог"}</td>
             <td class="text-end">

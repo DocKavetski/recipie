@@ -126,6 +126,10 @@ class DrugRepository:
                 connection.execute(
                     "ALTER TABLE drugs ADD COLUMN is_custom INTEGER NOT NULL DEFAULT 0"
                 )
+            if "clinical_ref_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE drugs ADD COLUMN clinical_ref_json TEXT NOT NULL DEFAULT '{}'"
+                )
             connection.commit()
 
         self._reset_custom_schemes_once()
@@ -134,7 +138,7 @@ class DrugRepository:
 
     def _reset_custom_schemes_once(self) -> None:
         """Однократно сбрасывает пользовательские схемы после обновления каталога схем."""
-        marker = "schemes_refreshed_v1_2_15"
+        marker = "schemes_refreshed_v1_2_17"
         with self._connect() as connection:
             connection.execute(
                 """
@@ -186,8 +190,8 @@ class DrugRepository:
                 INSERT INTO drugs (
                     category, mnn, russian_name, latin_name, drug_form, dosage, packaging,
                     trade_names_json, search_aliases_json, scheme_options_json, trade_details_json,
-                    form_options_json, dosage_options_json, form_dosage_map_json, is_custom
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    form_options_json, dosage_options_json, form_dosage_map_json, clinical_ref_json, is_custom
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                 ON CONFLICT(mnn) DO UPDATE SET
                     category = excluded.category,
                     russian_name = excluded.russian_name,
@@ -201,7 +205,8 @@ class DrugRepository:
                     trade_details_json = excluded.trade_details_json,
                     form_options_json = excluded.form_options_json,
                     dosage_options_json = excluded.dosage_options_json,
-                    form_dosage_map_json = excluded.form_dosage_map_json
+                    form_dosage_map_json = excluded.form_dosage_map_json,
+                    clinical_ref_json = excluded.clinical_ref_json
                 WHERE COALESCE(drugs.is_custom, 0) = 0
                 """,
                 [
@@ -220,6 +225,15 @@ class DrugRepository:
                         json.dumps(item.get("form_options", []), ensure_ascii=False),
                         json.dumps(item.get("dosage_options", []), ensure_ascii=False),
                         json.dumps(item.get("form_dosage_map", {}), ensure_ascii=False),
+                        json.dumps(
+                            {
+                                "max_daily_dose": item.get("max_daily_dose") or "по инструкции",
+                                "discontinuation": item.get("discontinuation") or "optional",
+                                "discontinuation_label": item.get("discontinuation_label")
+                                or "Желательна плавная отмена",
+                            },
+                            ensure_ascii=False,
+                        ),
                     )
                     for item in drugs
                 ],
@@ -234,6 +248,7 @@ class DrugRepository:
                     drugs.category, drugs.mnn, drugs.russian_name, drugs.latin_name, drugs.drug_form, drugs.dosage, drugs.packaging,
                     drugs.trade_names_json, drugs.search_aliases_json, drugs.scheme_options_json, drugs.trade_details_json,
                     drugs.form_options_json, drugs.dosage_options_json, drugs.form_dosage_map_json,
+                    drugs.clinical_ref_json,
                     COALESCE(drugs.is_custom, 0) AS is_custom,
                     custom_drug_schemes.scheme_options_json AS custom_scheme_options_json
                 FROM drugs
@@ -450,8 +465,8 @@ class DrugRepository:
                 INSERT INTO drugs (
                     category, mnn, russian_name, latin_name, drug_form, dosage, packaging,
                     trade_names_json, search_aliases_json, scheme_options_json, trade_details_json,
-                    form_options_json, dosage_options_json, form_dosage_map_json, is_custom
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    form_options_json, dosage_options_json, form_dosage_map_json, clinical_ref_json, is_custom
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                 ON CONFLICT(mnn) DO UPDATE SET
                     category = excluded.category,
                     russian_name = excluded.russian_name,
@@ -466,6 +481,7 @@ class DrugRepository:
                     form_options_json = excluded.form_options_json,
                     dosage_options_json = excluded.dosage_options_json,
                     form_dosage_map_json = excluded.form_dosage_map_json,
+                    clinical_ref_json = excluded.clinical_ref_json,
                     is_custom = 1
                 """,
                 (
@@ -483,6 +499,14 @@ class DrugRepository:
                     json.dumps(form_options, ensure_ascii=False),
                     json.dumps(dosage_options, ensure_ascii=False),
                     json.dumps(form_dosage_map, ensure_ascii=False),
+                    json.dumps(
+                        {
+                            "max_daily_dose": "по инструкции",
+                            "discontinuation": "optional",
+                            "discontinuation_label": "Желательна плавная отмена",
+                        },
+                        ensure_ascii=False,
+                    ),
                 ),
             )
             connection.commit()
@@ -604,6 +628,23 @@ class DrugRepository:
             if isinstance(raw_aliases, list)
             else []
         )
+        clinical_ref: dict[str, Any] = {}
+        if "clinical_ref_json" in keys and row["clinical_ref_json"]:
+            try:
+                parsed_ref = json.loads(row["clinical_ref_json"])
+                if isinstance(parsed_ref, dict):
+                    clinical_ref = parsed_ref
+            except (TypeError, json.JSONDecodeError):
+                clinical_ref = {}
+        max_daily_dose = str(clinical_ref.get("max_daily_dose") or "").strip() or "по инструкции"
+        discontinuation = str(clinical_ref.get("discontinuation") or "optional").strip().lower()
+        discontinuation_label = str(clinical_ref.get("discontinuation_label") or "").strip()
+        if not discontinuation_label:
+            discontinuation_label = {
+                "taper": "Нужна плавная отмена",
+                "abrupt": "Можно отменить сразу",
+                "optional": "Желательна плавная отмена",
+            }.get(discontinuation, "Желательна плавная отмена")
         return {
             "category": row["category"],
             "mnn": row["mnn"],
@@ -619,6 +660,9 @@ class DrugRepository:
             "search_aliases": search_aliases,
             "scheme_options": scheme_options,
             "has_custom_scheme": has_custom_scheme,
+            "max_daily_dose": max_daily_dose,
+            "discontinuation": discontinuation,
+            "discontinuation_label": discontinuation_label,
             "trade_details": json.loads(row["trade_details_json"] or "{}"),
             "is_custom": bool(row["is_custom"]) if "is_custom" in keys else False,
         }
