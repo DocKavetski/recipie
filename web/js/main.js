@@ -1149,7 +1149,6 @@ function fillSchemeOptions(row, options, selectedValue) {
     ensureSchemeListId(row);
     const list = row.querySelector(".drug-scheme-datalist");
     const input = row.querySelector(".drug-scheme-input");
-    const select = row.querySelector(".drug-scheme-select");
     const values = sortSchemesByGroup(asStringList(options));
     const selected = optionLabel(selectedValue);
     if (selected && !values.includes(selected)) {
@@ -1163,35 +1162,6 @@ function fillSchemeOptions(row, options, selectedValue) {
             option.value = value;
             list.appendChild(option);
         });
-    }
-
-    if (select) {
-        const grouped = {
-            support: values.filter((value) => schemeLineGroup(value) === "support"),
-            start: values.filter((value) => schemeLineGroup(value) === "start"),
-            stop: values.filter((value) => schemeLineGroup(value) === "stop"),
-        };
-        const blocks = [
-            ["Поддержка", grouped.support],
-            ["Начало", grouped.start],
-            ["Отмена", grouped.stop],
-        ];
-        select.innerHTML = `<option value="">Схема…</option>`;
-        for (const [label, items] of blocks) {
-            if (!items.length) {
-                continue;
-            }
-            const group = document.createElement("optgroup");
-            group.label = label;
-            for (const value of items) {
-                const option = document.createElement("option");
-                option.value = value;
-                option.textContent = value;
-                group.appendChild(option);
-            }
-            select.appendChild(group);
-        }
-        select.value = selected && values.includes(selected) ? selected : "";
     }
 
     if (input) {
@@ -1510,25 +1480,8 @@ function bindSchemeInput(row) {
     ensureSchemeListId(row);
     // Схемы каталога сохраняются только на вкладке «Схемы».
     // Здесь — только черновик рецепта (autosave формы).
-    schemeInput.addEventListener("input", () => {
-        const select = row.querySelector(".drug-scheme-select");
-        if (select) {
-            const value = schemeInput.value.trim();
-            select.value = Array.from(select.options).some((opt) => opt.value === value) ? value : "";
-        }
-        scheduleAutosave();
-    });
+    schemeInput.addEventListener("input", () => scheduleAutosave());
     schemeInput.addEventListener("change", () => scheduleAutosave());
-    const schemeSelect = row.querySelector(".drug-scheme-select");
-    if (schemeSelect && !schemeSelect.dataset.bound) {
-        schemeSelect.addEventListener("change", () => {
-            if (schemeSelect.value) {
-                schemeInput.value = schemeSelect.value;
-            }
-            scheduleAutosave();
-        });
-        schemeSelect.dataset.bound = "true";
-    }
     schemeInput.dataset.bound = "true";
 }
 
