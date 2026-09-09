@@ -134,7 +134,7 @@ class DrugRepository:
 
     def _reset_custom_schemes_once(self) -> None:
         """Однократно сбрасывает пользовательские схемы после обновления каталога схем."""
-        marker = "schemes_refreshed_v1_2_15"
+        marker = "schemes_refreshed_v1_2_17"
         with self._connect() as connection:
             connection.execute(
                 """

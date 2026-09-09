@@ -140,6 +140,15 @@ def test_seed_schemes_are_drug_specific(tmp_path: Path):
     assert "утром" in by_mnn["Aripiprazole"]["scheme_options"][0]
     assert any("2 раза" in s for s in by_mnn["Buspirone"]["scheme_options"])
     assert any("ситуации" in s for s in by_mnn["Propranolol"]["scheme_options"])
+    assert any(s.startswith("начало:") for s in by_mnn["Escitalopram"]["scheme_options"])
+    assert any(s.startswith("отмена:") for s in by_mnn["Escitalopram"]["scheme_options"])
+    assert any(s.startswith("начало:") for s in by_mnn["Venlafaxine"]["scheme_options"])
+    assert any(s.startswith("отмена:") for s in by_mnn["Venlafaxine"]["scheme_options"])
+    assert any(s.startswith("начало:") for s in by_mnn["Lamotrigine"]["scheme_options"])
+    assert any(s.startswith("отмена:") for s in by_mnn["Lithium carbonate"]["scheme_options"])
+    assert any(s.startswith("начало:") for s in by_mnn["Carbamazepine"]["scheme_options"])
+    assert len(by_mnn["Escitalopram"]["scheme_options"]) >= 5
+    assert len(by_mnn["Escitalopram"]["scheme_options"]) <= 8
 
 
 def test_old_custom_schemes_are_cleared_once(tmp_path: Path):
