@@ -2403,9 +2403,26 @@ function extractTreatmentSchemeLocal(line) {
     if (!text) {
         return "";
     }
-    const hint = text.match(/\b(?:по\s+\d|утром|вечером|ноч[ьюи]|днём|днем|раза?\s+в\s+день|р\/?д|через\s+день|по\s+потребности|на\s+ночь|перед\s+сном|после\s+еды|до\s+еды|1\/2|½|1[,.]5\s*т|табл|\d+\s*т\b)/i);
-    if (hint) {
-        return text.slice(hint.index).replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    // Без lookbehind: ищем кандидатов и отбрасываем «4т» из «1/4т».
+    const hintRe = /\bпо\s*(?:\d+\s*\/\s*\d+|[½⅓⅔¼¾]|\d+(?:[.,]\d+)?)|\b(?:утром|вечером|ноч[ьюи]|днём|днем|раза?\s+в\s+день|р\/?д|через\s+день|по\s+потребности|на\s+ночь|перед\s+сном|после\s+еды|до\s+еды|табл|1[,.]5\s*т)\b|\d+\s*\/\s*\d+|[½⅓⅔¼¾]|\b\d+\s*т\b/gi;
+    let best = null;
+    let match = hintRe.exec(text);
+    while (match) {
+        const token = match[0];
+        const idx = match.index;
+        const prev = idx > 0 ? text[idx - 1] : "";
+        const isFractionDenomTab = /^\d+\s*т$/i.test(token) && prev === "/";
+        const isBareFraction = /^\d+\s*\/\s*\d+$/.test(token);
+        const fracPrev = idx > 0 ? text[idx - 1] : "";
+        if (isFractionDenomTab || (isBareFraction && /[\d/]/.test(fracPrev))) {
+            match = hintRe.exec(text);
+            continue;
+        }
+        best = match;
+        break;
+    }
+    if (best) {
+        return text.slice(best.index).replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     }
     return text;
 }
