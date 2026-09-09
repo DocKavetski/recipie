@@ -91,6 +91,15 @@ class DrugRepository:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
             connection.commit()
 
             columns = {
@@ -119,8 +128,42 @@ class DrugRepository:
                 )
             connection.commit()
 
+        self._reset_custom_schemes_once()
         self.sync_seed_catalog(replace=True)
         self._ensure_runtime_exposes()
+
+    def _reset_custom_schemes_once(self) -> None:
+        """Однократно сбрасывает пользовательские схемы после обновления каталога схем."""
+        marker = "schemes_refreshed_v1_2_15"
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            row = connection.execute(
+                "SELECT value FROM app_meta WHERE key = ?",
+                (marker,),
+            ).fetchone()
+            if row:
+                return
+            deleted = connection.execute("DELETE FROM custom_drug_schemes").rowcount
+            connection.execute(
+                """
+                INSERT INTO app_meta (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (marker, "1"),
+            )
+            connection.commit()
+            LOGGER.info("Cleared %s custom drug schemes (%s)", deleted, marker)
 
     def _ensure_runtime_exposes(self) -> None:
         try:
