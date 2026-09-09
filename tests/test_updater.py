@@ -72,6 +72,52 @@ def test_is_access_error_variants():
     assert not updater._is_access_error(RuntimeError("offline"))
 
 
+def test_local_ui_needs_repair_detects_duplicate_scheme_select(tmp_path, monkeypatch):
+    root = tmp_path / "install"
+    (root / "web").mkdir(parents=True)
+    (root / "web" / "index.html").write_text(
+        '<select class="drug-scheme-select"></select><input class="drug-scheme-input">',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(updater, "app_root", lambda: root)
+    monkeypatch.setattr(updater, "is_frozen", lambda: True)
+    assert updater.local_ui_needs_repair() is True
+
+    (root / "web" / "index.html").write_text(
+        '<input class="drug-scheme-input"><datalist class="drug-scheme-datalist"></datalist>',
+        encoding="utf-8",
+    )
+    assert updater.local_ui_needs_repair() is False
+
+
+def test_get_update_status_offers_repair_when_ui_stale(monkeypatch, tmp_path):
+    root = tmp_path / "install"
+    (root / "web").mkdir(parents=True)
+    (root / "web" / "index.html").write_text(
+        '<select class="drug-scheme-select"></select>',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(updater, "app_root", lambda: root)
+    monkeypatch.setattr(updater, "is_git_checkout", lambda: False)
+    monkeypatch.setattr(updater, "is_frozen", lambda: True)
+    monkeypatch.setattr(updater, "read_local_version", lambda: "1.2.20")
+    monkeypatch.setattr(updater, "remote_version_file", lambda: "1.2.20")
+    monkeypatch.setattr(
+        updater,
+        "latest_release_asset",
+        lambda: {
+            "tag": "1.2.20",
+            "name": "Recepty-portable.zip",
+            "url": "https://example.test/r.zip",
+            "size": 1,
+        },
+    )
+    status = updater.get_update_status()
+    assert status["update_available"] is True
+    assert status["ui_needs_repair"] is True
+    assert "интерфейс" in status["message"].lower() or "схема" in status["message"].lower()
+
+
 def test_frozen_overlay_skips_internal(tmp_path, monkeypatch):
     source = tmp_path / "release"
     root = tmp_path / "install"
