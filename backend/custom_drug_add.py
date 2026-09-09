@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from backend.seed_loader import _default_schemes
 from backend.tabletka_enrich import enrich_by_russian_name, enrichment_to_seed_fields
 from backend.trade_packaging import trade_details_from_variants
 
@@ -65,7 +66,7 @@ def payload_from_tabletka_query(query: str, *, enricher=None) -> dict[str, Any]:
     variants = (fields.get("tabletka") or {}).get("variants") or []
     trade_details = trade_details_from_variants(variants) or fields.get("trade_details") or {}
 
-    return {
+    payload = {
         "category": "Прочее",
         "mnn": mnn,
         "russian_name": russian,
@@ -78,11 +79,6 @@ def payload_from_tabletka_query(query: str, *, enricher=None) -> dict[str, Any]:
         "form_dosage_map": fields.get("form_dosage_map") or {},
         "trade_names": fields.get("trade_names") or [],
         "trade_details": trade_details,
-        "scheme_options": [
-            "по 1 таблетке утром",
-            "по 1 таблетке вечером",
-            "по 1/2 таблетки на ночь",
-        ],
         "search_aliases": list(dict.fromkeys([
             russian.lower(),
             mnn.lower(),
@@ -96,6 +92,8 @@ def payload_from_tabletka_query(query: str, *, enricher=None) -> dict[str, Any]:
             "message": enrichment.message,
         },
     }
+    payload["scheme_options"] = _default_schemes(payload)
+    return payload
 
 
 def add_custom_drug_from_tabletka(repository: Any, query: str, *, enricher=None) -> dict[str, Any]:

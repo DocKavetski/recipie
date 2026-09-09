@@ -100,6 +100,12 @@ def test_custom_scheme_overrides_persist_across_sync(tmp_path: Path):
 
     original = next(item for item in repo.list_drugs() if item["mnn"] == "Escitalopram")
     assert original["scheme_options"]
+    assert "по 1 таблетке утром" in original["scheme_options"]
+    assert original["scheme_options"] != [
+        "по 1 таблетке утром",
+        "по 1 таблетке вечером",
+        "по 1/2 таблетке на ночь",
+    ]
 
     saved = repo.save_drug_schemes("Escitalopram", ["по 1 таблетке утром", "по 1 таблетке вечером"])
     assert saved["ok"] is True
@@ -120,6 +126,54 @@ def test_custom_scheme_overrides_persist_across_sync(tmp_path: Path):
     restored = next(item for item in repo.list_drugs() if item["mnn"] == "Escitalopram")
     assert restored["scheme_options"] == original["scheme_options"]
     assert restored["has_custom_scheme"] is False
+
+
+def test_seed_schemes_are_drug_specific(tmp_path: Path):
+    repo = DrugRepository(tmp_path / "app.db")
+    repo.initialize()
+    by_mnn = {item["mnn"]: item for item in repo.list_drugs()}
+
+    assert by_mnn["Escitalopram"]["scheme_options"][0] == "по 1 таблетке утром"
+    assert "на ночь" in by_mnn["Fluvoxamine"]["scheme_options"][0]
+    assert "на ночь" in by_mnn["Mirtazapine"]["scheme_options"][0]
+    assert "на ночь" in by_mnn["Zopiclone"]["scheme_options"][0]
+    assert "утром" in by_mnn["Aripiprazole"]["scheme_options"][0]
+    assert any("2 раза" in s for s in by_mnn["Buspirone"]["scheme_options"])
+    assert any("ситуации" in s for s in by_mnn["Propranolol"]["scheme_options"])
+
+
+def test_old_custom_schemes_are_cleared_once(tmp_path: Path):
+    repo = DrugRepository(tmp_path / "app.db")
+    repo.initialize()
+    repo.save_drug_schemes("Sertraline", ["устаревшая схема"])
+    assert next(d for d in repo.list_drugs() if d["mnn"] == "Sertraline")["has_custom_scheme"] is True
+
+    # Повторная инициализация не должна снова сбрасывать уже новые пользовательские схемы.
+    repo.initialize()
+    assert next(d for d in repo.list_drugs() if d["mnn"] == "Sertraline")["scheme_options"] == ["устаревшая схема"]
+
+    # На чистой БД маркер миграции очищает кастомные схемы один раз.
+    fresh = DrugRepository(tmp_path / "fresh.db")
+    with fresh._connect() as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS custom_drug_schemes (
+                mnn TEXT PRIMARY KEY,
+                scheme_options_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO custom_drug_schemes (mnn, scheme_options_json) VALUES (?, ?)",
+            ("Escitalopram", json.dumps(["старая"], ensure_ascii=False)),
+        )
+        connection.commit()
+    fresh.initialize()
+    esc = next(d for d in fresh.list_drugs() if d["mnn"] == "Escitalopram")
+    assert esc["has_custom_scheme"] is False
+    assert "старая" not in esc["scheme_options"]
+    assert "по 1 таблетке утром" in esc["scheme_options"]
 
 
 def test_template_can_be_deleted(tmp_path: Path):
