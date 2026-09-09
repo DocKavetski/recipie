@@ -149,6 +149,12 @@ def test_seed_schemes_are_drug_specific(tmp_path: Path):
     assert any(s.startswith("начало:") for s in by_mnn["Carbamazepine"]["scheme_options"])
     assert len(by_mnn["Escitalopram"]["scheme_options"]) >= 5
     assert len(by_mnn["Escitalopram"]["scheme_options"]) <= 8
+    assert by_mnn["Escitalopram"]["max_daily_dose"] == "20 мг/сут"
+    assert by_mnn["Escitalopram"]["discontinuation"] == "taper"
+    assert "плавная" in by_mnn["Escitalopram"]["discontinuation_label"].lower()
+    assert by_mnn["Melatonin"]["discontinuation"] == "abrupt"
+    assert by_mnn["Lithium carbonate"]["max_daily_dose"]
+    assert by_mnn["Venlafaxine"]["discontinuation"] == "taper"
 
 
 def test_old_custom_schemes_are_cleared_once(tmp_path: Path):

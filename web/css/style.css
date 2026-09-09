@@ -433,6 +433,12 @@ body {
     vertical-align: top;
 }
 
+.scheme-editor-ref {
+    line-height: 1.35;
+    color: var(--text, #212529);
+    max-width: 12rem;
+}
+
 .update-meta {
     font-size: 0.9rem;
     line-height: 1.45;

@@ -526,6 +526,86 @@ def _default_schemes(item: dict[str, Any]) -> list[str]:
     return _category_fallback_schemes(item.get("category", ""), unit)[:_MAX_SCHEMES]
 
 
+# Справка для вкладки «Схемы»: макс. суточная доза и режим отмены.
+# discontinuation: taper | abrupt | optional
+_CLINICAL_REF_BY_MNN: dict[str, dict[str, str]] = {
+    "Escitalopram": {"max_daily_dose": "20 мг/сут", "discontinuation": "taper"},
+    "Sertraline": {"max_daily_dose": "200 мг/сут", "discontinuation": "taper"},
+    "Fluoxetine": {"max_daily_dose": "80 мг/сут", "discontinuation": "taper"},
+    "Paroxetine": {"max_daily_dose": "50 мг/сут", "discontinuation": "taper"},
+    "Fluvoxamine": {"max_daily_dose": "300 мг/сут", "discontinuation": "taper"},
+    "Vortioxetine": {"max_daily_dose": "20 мг/сут", "discontinuation": "taper"},
+    "Venlafaxine": {"max_daily_dose": "225 мг/сут", "discontinuation": "taper"},
+    "Duloxetine": {"max_daily_dose": "120 мг/сут", "discontinuation": "taper"},
+    "Clomipramine": {"max_daily_dose": "250 мг/сут", "discontinuation": "taper"},
+    "Amitriptyline": {"max_daily_dose": "150 мг/сут", "discontinuation": "taper"},
+    "Maprotiline": {"max_daily_dose": "150 мг/сут", "discontinuation": "taper"},
+    "Mirtazapine": {"max_daily_dose": "45 мг/сут", "discontinuation": "taper"},
+    "Lithium carbonate": {"max_daily_dose": "по уровню Li", "discontinuation": "taper"},
+    "Carbamazepine": {"max_daily_dose": "1600 мг/сут", "discontinuation": "taper"},
+    "Valproic acid": {"max_daily_dose": "2500 мг/сут", "discontinuation": "taper"},
+    "Lamotrigine": {"max_daily_dose": "400 мг/сут", "discontinuation": "taper"},
+    "Oxcarbazepine": {"max_daily_dose": "2400 мг/сут", "discontinuation": "taper"},
+    "Pregabalin": {"max_daily_dose": "600 мг/сут", "discontinuation": "taper"},
+    "Gabapentin": {"max_daily_dose": "3600 мг/сут", "discontinuation": "taper"},
+    "Quetiapine": {"max_daily_dose": "800 мг/сут", "discontinuation": "taper"},
+    "Olanzapine": {"max_daily_dose": "20 мг/сут", "discontinuation": "taper"},
+    "Aripiprazole": {"max_daily_dose": "30 мг/сут", "discontinuation": "taper"},
+    "Risperidone": {"max_daily_dose": "16 мг/сут", "discontinuation": "taper"},
+    "Clozapine": {"max_daily_dose": "900 мг/сут", "discontinuation": "taper"},
+    "Cariprazine": {"max_daily_dose": "6 мг/сут", "discontinuation": "taper"},
+    "Haloperidol": {"max_daily_dose": "30 мг/сут", "discontinuation": "taper"},
+    "Chlorprothixene": {"max_daily_dose": "600 мг/сут", "discontinuation": "taper"},
+    "Sulpiride": {"max_daily_dose": "1600 мг/сут", "discontinuation": "taper"},
+    "Periciazine": {"max_daily_dose": "100 мг/сут", "discontinuation": "taper"},
+    "Flupentixol": {"max_daily_dose": "18 мг/сут", "discontinuation": "taper"},
+    "Buspirone": {"max_daily_dose": "60 мг/сут", "discontinuation": "optional"},
+    "Tofisopam": {"max_daily_dose": "300 мг/сут", "discontinuation": "optional"},
+    "Phenibut": {"max_daily_dose": "2500 мг/сут", "discontinuation": "taper"},
+    "Zopiclone": {"max_daily_dose": "7.5 мг/сут", "discontinuation": "optional"},
+    "Melatonin": {"max_daily_dose": "10 мг/сут", "discontinuation": "abrupt"},
+    "Bisoprolol": {"max_daily_dose": "10 мг/сут", "discontinuation": "optional"},
+    "Propranolol": {"max_daily_dose": "160 мг/сут", "discontinuation": "abrupt"},
+    "Atenolol": {"max_daily_dose": "100 мг/сут", "discontinuation": "optional"},
+    "Atomoxetine": {"max_daily_dose": "100 мг/сут", "discontinuation": "taper"},
+}
+
+_DISCONTINUATION_LABELS = {
+    "taper": "Нужна плавная отмена",
+    "abrupt": "Можно отменить сразу",
+    "optional": "Желательна плавная отмена",
+}
+
+
+def _category_clinical_ref(category: str) -> dict[str, str]:
+    key = _normalize_category(category).lower()
+    if any(token in key for token in ("антидепресс", "ssri", "snri", "трицикл", "нормотимик", "антипсихот", "антиконвульс")):
+        return {"max_daily_dose": "по инструкции", "discontinuation": "taper"}
+    if "снотвор" in key or "гипнот" in key:
+        return {"max_daily_dose": "по инструкции", "discontinuation": "optional"}
+    if "анксиолит" in key:
+        return {"max_daily_dose": "по инструкции", "discontinuation": "optional"}
+    return {"max_daily_dose": "по инструкции", "discontinuation": "optional"}
+
+
+def _clinical_ref_for(item: dict[str, Any]) -> dict[str, str]:
+    mnn = str(item.get("mnn") or "").strip()
+    raw = dict(_CLINICAL_REF_BY_MNN.get(mnn) or _category_clinical_ref(item.get("category", "")))
+    if item.get("max_daily_dose"):
+        raw["max_daily_dose"] = str(item.get("max_daily_dose")).strip()
+    if item.get("discontinuation"):
+        raw["discontinuation"] = str(item.get("discontinuation")).strip().lower()
+    mode = raw.get("discontinuation") or "optional"
+    if mode not in _DISCONTINUATION_LABELS:
+        mode = "optional"
+    dose = str(raw.get("max_daily_dose") or "по инструкции").strip() or "по инструкции"
+    return {
+        "max_daily_dose": dose,
+        "discontinuation": mode,
+        "discontinuation_label": _DISCONTINUATION_LABELS[mode],
+    }
+
+
 def _normalize_form_options(item: dict[str, Any], drug_form: str) -> list[str]:
     options = [str(x).strip() for x in (item.get("form_options") or []) if str(x).strip()]
     if drug_form and drug_form not in options:
@@ -610,6 +690,7 @@ def normalize_seed_item(item: dict[str, Any]) -> dict[str, Any] | None:
             for name in trade_names
         })
 
+    clinical_ref = _clinical_ref_for(item)
     return {
         "category": _normalize_category(item.get("category", "")),
         "mnn": mnn,
@@ -625,6 +706,9 @@ def normalize_seed_item(item: dict[str, Any]) -> dict[str, Any] | None:
         "trade_details": trade_details,
         "search_aliases": aliases,
         "scheme_options": _default_schemes(item),
+        "max_daily_dose": clinical_ref["max_daily_dose"],
+        "discontinuation": clinical_ref["discontinuation"],
+        "discontinuation_label": clinical_ref["discontinuation_label"],
         "dispense_qty": dispense_qty,
     }
 
