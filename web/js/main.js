@@ -1418,35 +1418,10 @@ function bindSchemeInput(row) {
         return;
     }
     ensureSchemeListId(row);
-    const persistScheme = async () => {
-        const value = schemeInput.value.trim();
-        if (value) {
-            const list = row.querySelector(".drug-scheme-datalist");
-            const exists = Array.from(list.options).some((option) => option.value === value);
-            if (!exists) {
-                const option = document.createElement("option");
-                option.value = value;
-                list.appendChild(option);
-            }
-            const state = getRowState(row);
-            if (window.eel && typeof window.eel.save_drug_schemes === "function" && state.mnn) {
-                try {
-                    const result = await window.eel.save_drug_schemes(state.mnn, normalizeSchemeLines(collectSchemeOptions(row)))();
-                    updateCatalogDrugSchemes(state.mnn, result.scheme_options || collectSchemeOptions(row), true);
-                    setStatus("Схема приёма сохранена и будет предложена в следующий раз.");
-                } catch (error) {
-                    console.error(error);
-                    setStatus("Схема сохранена локально, но не записана в общий список.");
-                }
-            } else {
-                setStatus("Схема приёма сохранена.");
-            }
-        }
-        scheduleAutosave();
-    };
+    // Схемы каталога сохраняются только на вкладке «Схемы».
+    // Здесь — только черновик рецепта (autosave формы).
     schemeInput.addEventListener("input", () => scheduleAutosave());
-    schemeInput.addEventListener("change", persistScheme);
-    schemeInput.addEventListener("blur", persistScheme);
+    schemeInput.addEventListener("change", () => scheduleAutosave());
     schemeInput.dataset.bound = "true";
 }
 
