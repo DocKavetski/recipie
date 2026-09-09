@@ -282,28 +282,34 @@ def remote_version_file_via_git() -> str | None:
 
 
 def remote_version_file_via_http() -> str | None:
-    url = (
+    urls = (
         f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/"
-        f"{GITHUB_BRANCH}/VERSION"
+        f"{GITHUB_BRANCH}/VERSION",
+        # Зеркало на случай блокировки raw.githubusercontent.com
+        f"https://cdn.jsdelivr.net/gh/{GITHUB_OWNER}/{GITHUB_REPO}@{GITHUB_BRANCH}/VERSION",
     )
-    try:
-        raw = _http_bytes(url, timeout=15).decode("utf-8").strip()
-        return raw or None
-    except Exception:  # noqa: BLE001
-        # Если raw.githubusercontent.com недоступен/блокируется — пробуем GitHub API.
+    for url in urls:
         try:
-            api_url = (
-                f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/"
-                f"VERSION?ref={GITHUB_BRANCH}"
-            )
-            payload = _http_json(api_url, timeout=15)
-            import base64
-            content_b64 = payload.get("content") or ""
-            if isinstance(content_b64, str) and content_b64:
-                decoded = base64.b64decode(content_b64).decode("utf-8").strip()
-                return decoded or None
+            raw = _http_bytes(url, timeout=15).decode("utf-8").strip()
+            if raw:
+                return raw
         except Exception:  # noqa: BLE001
-            return None
+            continue
+    # Если raw.githubusercontent.com недоступен/блокируется — пробуем GitHub API.
+    try:
+        api_url = (
+            f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/"
+            f"VERSION?ref={GITHUB_BRANCH}"
+        )
+        payload = _http_json(api_url, timeout=15)
+        import base64
+        content_b64 = payload.get("content") or ""
+        if isinstance(content_b64, str) and content_b64:
+            decoded = base64.b64decode(content_b64).decode("utf-8").strip()
+            return decoded or None
+    except Exception:  # noqa: BLE001
+        return None
+    return None
 
 
 def remote_version_file() -> str | None:
@@ -312,6 +318,32 @@ def remote_version_file() -> str | None:
         if version:
             return version
     return remote_version_file_via_http()
+
+
+def local_web_index_path() -> Path:
+    return app_root() / "web" / "index.html"
+
+
+def local_ui_needs_repair() -> bool:
+    """
+    Версия в VERSION могла обновиться, а web/ остаться старым
+    (например, два поля схемы: select + input из 1.2.19).
+    """
+    index = local_web_index_path()
+    if not index.is_file():
+        # В frozen без overlay web берётся из _internal — это ок до первого обновления.
+        if is_frozen() and (app_root() / "_internal" / "web" / "index.html").is_file():
+            # Если рядом с exe уже есть web/overlay-папка неполная — чиним.
+            return (app_root() / "web").exists()
+        return False
+    try:
+        text = index.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return True
+    # Признак сломанного UI 1.2.19: дубль поля схемы в строке рецепта.
+    if "drug-scheme-select" in text:
+        return True
+    return False
 
 
 def latest_release_asset() -> dict[str, Any] | None:
@@ -464,12 +496,38 @@ def get_update_status() -> dict[str, Any]:
             status["message"] = _friendly_update_error(RuntimeError(check_errors[0]))
             return status
 
+    # Даже при совпадении версии — починка битого/старого web (два поля схемы и т.п.).
+    needs_repair = False
+    try:
+        needs_repair = local_ui_needs_repair()
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning("ui integrity check failed: %s", exc)
+    status["ui_needs_repair"] = needs_repair
+    if needs_repair:
+        if not status.get("release_asset"):
+            try:
+                release = latest_release_asset()
+            except Exception:  # noqa: BLE001
+                release = None
+            if release:
+                status["release_asset"] = release
+                release_tag = str(release.get("tag") or "").strip()
+                remote_version = _pick_newer_version(remote_version, release_tag)
+                status["remote_version"] = remote_version or status.get("remote_version")
+        status["update_available"] = True
+
     if status["update_available"]:
-        shown = remote_version or (remote_sha[:7] if remote_sha else "новая")
-        status["message"] = (
-            f"Доступно обновление: {shown}. "
-            f"Если кнопка не сработает — скачайте вручную: {GITHUB_URL}/releases/latest"
-        )
+        if needs_repair and not _version_is_newer(str(status.get("remote_version") or ""), local_version):
+            status["message"] = (
+                "Нужно обновить файлы интерфейса (исправление поля «Схема»). "
+                f"Если кнопка не сработает — скачайте вручную: {GITHUB_URL}/releases/latest"
+            )
+        else:
+            shown = remote_version or (remote_sha[:7] if remote_sha else "новая")
+            status["message"] = (
+                f"Доступно обновление: {shown}. "
+                f"Если кнопка не сработает — скачайте вручную: {GITHUB_URL}/releases/latest"
+            )
     else:
         status["message"] = f"Установлена актуальная версия {local_version}"
 

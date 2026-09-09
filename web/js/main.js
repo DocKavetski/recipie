@@ -1902,8 +1902,14 @@ function createEmptyRowData() {
     };
 }
 
+function stripLegacyDuplicateSchemeControls(scope = document) {
+    // 1.2.19 ошибочно добавил select рядом с полем схемы — убираем, если остался в старом index.html.
+    scope.querySelectorAll(".drug-scheme-select").forEach((node) => node.remove());
+}
+
 function addDrugRow(drug = null, options = {}, container = drugRowsContainer) {
     const fragment = rowTemplate.content.cloneNode(true);
+    stripLegacyDuplicateSchemeControls(fragment);
     const row = fragment.querySelector(".drug-row");
 
     populateRow(row, drug || createEmptyRowData(), options);
@@ -3086,6 +3092,10 @@ async function initPrototype() {
     bindSchemeEditorControls();
     bindManualDrugControls();
     bindUpdateControls();
+    stripLegacyDuplicateSchemeControls(document);
+    if (rowTemplate?.content) {
+        stripLegacyDuplicateSchemeControls(rowTemplate.content);
+    }
     await loadPrintBlankCss();
     await loadCatalogFromBackend();
     await loadSettingsFromBackend();
