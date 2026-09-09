@@ -424,9 +424,28 @@ body {
 }
 
 .scheme-editor-textarea {
-    min-height: 5.5rem;
+    min-height: 3.2rem;
     line-height: 1.35;
     resize: vertical;
+}
+
+.scheme-editor-groups {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.scheme-editor-group {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0;
+}
+
+.scheme-editor-group-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--muted, #6c757d);
 }
 
 .scheme-editor-table td {
@@ -437,6 +456,10 @@ body {
     line-height: 1.35;
     color: var(--text, #212529);
     max-width: 12rem;
+}
+
+.drug-scheme-select {
+    min-width: 9rem;
 }
 
 .update-meta {

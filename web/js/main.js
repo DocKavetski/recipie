@@ -1078,6 +1078,61 @@ function normalizeSchemeLines(values) {
     return normalized;
 }
 
+function schemeLineGroup(line) {
+    const text = String(line || "").trim().toLowerCase();
+    if (text.startsWith("начало:")) {
+        return "start";
+    }
+    if (text.startsWith("отмена:")) {
+        return "stop";
+    }
+    return "support";
+}
+
+function splitSchemeGroups(lines) {
+    const groups = { support: [], start: [], stop: [] };
+    for (const line of normalizeSchemeLines(lines)) {
+        const group = schemeLineGroup(line);
+        if (group === "start") {
+            const body = line.replace(/^начало:\s*/i, "").trim();
+            if (body) {
+                groups.start.push(body);
+            }
+            continue;
+        }
+        if (group === "stop") {
+            const body = line.replace(/^отмена:\s*/i, "").trim();
+            if (body) {
+                groups.stop.push(body);
+            }
+            continue;
+        }
+        groups.support.push(line);
+    }
+    return groups;
+}
+
+function joinSchemeGroups(groups) {
+    const support = normalizeSchemeLines(groups?.support || []);
+    const start = normalizeSchemeLines(groups?.start || []).map((line) => {
+        const body = String(line).replace(/^начало:\s*/i, "").trim();
+        return body ? `начало: ${body}` : "";
+    }).filter(Boolean);
+    const stop = normalizeSchemeLines(groups?.stop || []).map((line) => {
+        const body = String(line).replace(/^отмена:\s*/i, "").trim();
+        return body ? `отмена: ${body}` : "";
+    }).filter(Boolean);
+    return normalizeSchemeLines([...support, ...start, ...stop]);
+}
+
+function sortSchemesByGroup(lines) {
+    const groups = { support: [], start: [], stop: [] };
+    for (const line of normalizeSchemeLines(lines)) {
+        groups[schemeLineGroup(line)].push(line);
+    }
+    return [...groups.support, ...groups.start, ...groups.stop];
+}
+
 function ensureSchemeListId(row) {
     const input = row.querySelector(".drug-scheme-input");
     const list = row.querySelector(".drug-scheme-datalist");
@@ -1094,19 +1149,54 @@ function fillSchemeOptions(row, options, selectedValue) {
     ensureSchemeListId(row);
     const list = row.querySelector(".drug-scheme-datalist");
     const input = row.querySelector(".drug-scheme-input");
-    const values = asStringList(options);
+    const select = row.querySelector(".drug-scheme-select");
+    const values = sortSchemesByGroup(asStringList(options));
     const selected = optionLabel(selectedValue);
     if (selected && !values.includes(selected)) {
         values.unshift(selected);
     }
 
-    list.innerHTML = "";
-    values.forEach((value) => {
-        const option = document.createElement("option");
-        option.value = value;
-        list.appendChild(option);
-    });
-    input.value = selected || values[0] || "";
+    if (list) {
+        list.innerHTML = "";
+        values.forEach((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            list.appendChild(option);
+        });
+    }
+
+    if (select) {
+        const grouped = {
+            support: values.filter((value) => schemeLineGroup(value) === "support"),
+            start: values.filter((value) => schemeLineGroup(value) === "start"),
+            stop: values.filter((value) => schemeLineGroup(value) === "stop"),
+        };
+        const blocks = [
+            ["Поддержка", grouped.support],
+            ["Начало", grouped.start],
+            ["Отмена", grouped.stop],
+        ];
+        select.innerHTML = `<option value="">Схема…</option>`;
+        for (const [label, items] of blocks) {
+            if (!items.length) {
+                continue;
+            }
+            const group = document.createElement("optgroup");
+            group.label = label;
+            for (const value of items) {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = value;
+                group.appendChild(option);
+            }
+            select.appendChild(group);
+        }
+        select.value = selected && values.includes(selected) ? selected : "";
+    }
+
+    if (input) {
+        input.value = selected || values[0] || "";
+    }
 }
 
 function resolveDrugByQuery(query) {
@@ -1420,8 +1510,25 @@ function bindSchemeInput(row) {
     ensureSchemeListId(row);
     // Схемы каталога сохраняются только на вкладке «Схемы».
     // Здесь — только черновик рецепта (autosave формы).
-    schemeInput.addEventListener("input", () => scheduleAutosave());
+    schemeInput.addEventListener("input", () => {
+        const select = row.querySelector(".drug-scheme-select");
+        if (select) {
+            const value = schemeInput.value.trim();
+            select.value = Array.from(select.options).some((opt) => opt.value === value) ? value : "";
+        }
+        scheduleAutosave();
+    });
     schemeInput.addEventListener("change", () => scheduleAutosave());
+    const schemeSelect = row.querySelector(".drug-scheme-select");
+    if (schemeSelect && !schemeSelect.dataset.bound) {
+        schemeSelect.addEventListener("change", () => {
+            if (schemeSelect.value) {
+                schemeInput.value = schemeSelect.value;
+            }
+            scheduleAutosave();
+        });
+        schemeSelect.dataset.bound = "true";
+    }
     schemeInput.dataset.bound = "true";
 }
 

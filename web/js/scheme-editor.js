@@ -1,4 +1,4 @@
-/** Вкладка «Схемы»: редактирование схем лечения по препаратам. */
+/** Вкладка «Схемы»: редактирование схем лечения по препаратам (группы). */
 
 const schemeEditorSearch = document.getElementById("schemeEditorSearch");
 const schemeEditorTableBody = document.getElementById("schemeEditorTableBody");
@@ -18,8 +18,39 @@ function schemeEditorMatches(drug, query) {
     return candidates.some((candidate) => normalizeText(candidate).includes(normalizedQuery));
 }
 
-async function saveSchemeEditorRow(mnn, textarea, statusCell) {
-    const schemes = normalizeSchemeLines(String(textarea.value || "").split("\n"));
+function schemeEditorGroupFields(row) {
+    return {
+        support: row.querySelector(".scheme-editor-support"),
+        start: row.querySelector(".scheme-editor-start"),
+        stop: row.querySelector(".scheme-editor-stop"),
+    };
+}
+
+function fillSchemeEditorGroups(row, schemes) {
+    const groups = splitSchemeGroups(schemes);
+    const fields = schemeEditorGroupFields(row);
+    if (fields.support) {
+        fields.support.value = groups.support.join("\n");
+    }
+    if (fields.start) {
+        fields.start.value = groups.start.join("\n");
+    }
+    if (fields.stop) {
+        fields.stop.value = groups.stop.join("\n");
+    }
+}
+
+function collectSchemeEditorGroups(row) {
+    const fields = schemeEditorGroupFields(row);
+    return joinSchemeGroups({
+        support: String(fields.support?.value || "").split("\n"),
+        start: String(fields.start?.value || "").split("\n"),
+        stop: String(fields.stop?.value || "").split("\n"),
+    });
+}
+
+async function saveSchemeEditorRow(mnn, row, statusCell) {
+    const schemes = collectSchemeEditorGroups(row);
     if (!schemes.length) {
         setStatus("Введите хотя бы одну схему лечения.");
         statusCell.textContent = "Пусто";
@@ -34,7 +65,7 @@ async function saveSchemeEditorRow(mnn, textarea, statusCell) {
         const result = await window.eel.save_drug_schemes(mnn, schemes)();
         const saved = result.scheme_options || schemes;
         updateCatalogDrugSchemes(mnn, saved, true);
-        textarea.value = saved.join("\n");
+        fillSchemeEditorGroups(row, saved);
         statusCell.textContent = "Пользовательская";
         setStatus(`Схемы для ${mnn} сохранены.`);
     } catch (error) {
@@ -44,7 +75,7 @@ async function saveSchemeEditorRow(mnn, textarea, statusCell) {
     }
 }
 
-async function resetSchemeEditorRow(drug, textarea, statusCell) {
+async function resetSchemeEditorRow(drug, row, statusCell) {
     if (!window.eel || typeof window.eel.reset_drug_schemes !== "function") {
         setStatus("Backend недоступен для сброса схем.");
         statusCell.textContent = "Нет backend";
@@ -63,7 +94,7 @@ async function resetSchemeEditorRow(drug, textarea, statusCell) {
             fallbackSchemes = current?.scheme_options || drug.scheme_options || [];
         }
         updateCatalogDrugSchemes(drug.mnn, fallbackSchemes, false);
-        textarea.value = normalizeSchemeLines(fallbackSchemes).join("\n");
+        fillSchemeEditorGroups(row, fallbackSchemes);
         statusCell.textContent = "Каталог";
         setStatus(`Схемы для ${drug.mnn} сброшены к каталогу.`);
         renderSchemeEditorTable();
@@ -100,7 +131,20 @@ function renderSchemeEditorTable() {
             </td>
             <td>${escapeHtml(drug.category || "")}</td>
             <td>
-                <textarea class="form-control form-control-sm scheme-editor-textarea" rows="4" placeholder="Каждая схема с новой строки">${escapeHtml(schemes.join("\n"))}</textarea>
+                <div class="scheme-editor-groups">
+                    <label class="scheme-editor-group">
+                        <span class="scheme-editor-group-label">Поддержка</span>
+                        <textarea class="form-control form-control-sm scheme-editor-textarea scheme-editor-support" rows="3" placeholder="по 1 таб. утром"></textarea>
+                    </label>
+                    <label class="scheme-editor-group">
+                        <span class="scheme-editor-group-label">Начало</span>
+                        <textarea class="form-control form-control-sm scheme-editor-textarea scheme-editor-start" rows="2" placeholder="по 1/2 таб. 7 дней, далее по 1 таб."></textarea>
+                    </label>
+                    <label class="scheme-editor-group">
+                        <span class="scheme-editor-group-label">Отмена</span>
+                        <textarea class="form-control form-control-sm scheme-editor-textarea scheme-editor-stop" rows="2" placeholder="по 1/2 таб. 7–14 дней, затем отменить"></textarea>
+                    </label>
+                </div>
             </td>
             <td class="small scheme-editor-ref">
                 <div><span class="text-muted">Макс.:</span> ${escapeHtml(maxDose)}</div>
@@ -114,13 +158,13 @@ function renderSchemeEditorTable() {
                 </div>
             </td>
         `;
-        const textarea = row.querySelector(".scheme-editor-textarea");
+        fillSchemeEditorGroups(row, schemes);
         const statusCell = row.querySelector(".scheme-editor-status");
         row.querySelector(".scheme-save-btn").addEventListener("click", () => {
-            saveSchemeEditorRow(drug.mnn, textarea, statusCell);
+            saveSchemeEditorRow(drug.mnn, row, statusCell);
         });
         row.querySelector(".scheme-reset-btn").addEventListener("click", () => {
-            resetSchemeEditorRow(drug, textarea, statusCell);
+            resetSchemeEditorRow(drug, row, statusCell);
         });
         schemeEditorTableBody.appendChild(row);
     }
