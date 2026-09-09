@@ -40,7 +40,12 @@ _DOSE_RE = re.compile(
     re.IGNORECASE,
 )
 
-_SCHEME_SPLIT = re.compile(r"\s*[—–−]\s*|\s+[-:]\s+")
+_SCHEME_SPLIT = re.compile(
+    # Длинное тире — разделитель схемы, но не диапазон доз (1/4–1/2, 10–20).
+    r"(?<![\d½⅓⅔¼¾/])\s*[—–−]\s*"
+    r"|\s*[—–−]\s*(?![\d½⅓⅔¼¾/])"
+    r"|\s+[-:]\s+"
+)
 
 _SCHEME_HINT = re.compile(
     r"\b(?:"
@@ -59,6 +64,19 @@ _PACK_QTY_RE = re.compile(
     re.IGNORECASE,
 )
 _PAREN_BLOCK_RE = re.compile(r"\([^)]*\)")
+
+# «по 1 таб.» / «1,5 таблетке» — это схема, не форма выпуска
+_INTAKE_BEFORE_FORM = re.compile(
+    r"(?i)"
+    r"(?:"
+    r"\bпо\s+[\d½⅓⅔¼¾]+(?:[.,]\d+)?(?:\s*/\s*[\d½⅓⅔¼¾]+)?|"
+    r"\bпо\s+\d+\s*/\s*\d+|"
+    r"[\d½⅓⅔¼¾]+(?:[.,]\d+)?(?:\s*/\s*[\d½⅓⅔¼¾]+)?|"
+    r"\d+\s*/\s*\d+"
+    r")\s*$"
+)
+
+_EDGE_JUNK_RE = re.compile(r"^[,;\s]+|[,;\s]+$")
 
 _KIND_PRIORITY = {
     "russian": 0,
@@ -90,6 +108,11 @@ def normalize_dose(value: Any) -> str:
     if "." in amount:
         amount = amount.rstrip("0").rstrip(".")
     return f"{amount} {unit}"
+
+
+def trim_scheme_edges(text: str) -> str:
+    """Убирает хвостовые запятые/;, но сохраняет точку сокращений (таб., сут.)."""
+    return _EDGE_JUNK_RE.sub("", str(text or "").strip()).strip()
 
 
 @dataclass(frozen=True)
@@ -155,7 +178,8 @@ def split_treatment_lines(text: Any) -> list[str]:
 
     lines: list[str] = []
     for chunk in chunks:
-        line = _BULLET.sub("", chunk).strip(" .")
+        # Не strip('.'): иначе пропадает точка у «таб.» / «сут.» в конце строки
+        line = _BULLET.sub("", chunk).strip()
         if not line:
             continue
         if _SKIP_LINE.match(normalize_match_text(line)):
@@ -169,8 +193,13 @@ def extract_form(line: str) -> tuple[str, str]:
         match = pattern.search(line)
         if not match:
             continue
-        cleaned = f"{line[:match.start()]} {line[match.end():]}".strip(" ,.;")
+        before = line[: match.start()]
+        # «по 1 таб.» / «1,5 таблетке» — часть схемы приёма, не форма выпуска
+        if _INTAKE_BEFORE_FORM.search(before):
+            continue
+        cleaned = f"{line[:match.start()]} {line[match.end():]}"
         cleaned = re.sub(r"\s+", " ", cleaned)
+        cleaned = trim_scheme_edges(cleaned)
         return form, cleaned
     return "", line
 
@@ -180,25 +209,26 @@ def extract_dosage(line: str) -> tuple[str, str]:
     if not match:
         return "", line
     dosage = normalize_dose(match.group(0))
-    cleaned = f"{line[:match.start()]} {line[match.end():]}".strip(" ,.;")
+    cleaned = f"{line[:match.start()]} {line[match.end():]}"
     cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = trim_scheme_edges(cleaned)
     return dosage, cleaned
 
 
 def extract_scheme(line: str) -> str:
-    text = str(line or "").strip(" ,.;")
+    text = trim_scheme_edges(line)
     if not text:
         return ""
 
     split = _SCHEME_SPLIT.split(text, maxsplit=1)
     if len(split) == 2 and split[1].strip():
-        return split[1].strip(" ,.;")
+        return trim_scheme_edges(split[1])
 
     hint = _SCHEME_HINT.search(text)
     if hint:
-        return text[hint.start() :].strip(" ,.;")
+        return trim_scheme_edges(text[hint.start() :])
 
-    return text.strip(" ,.;")
+    return text
 
 
 def pick_catalog_form(drug: dict[str, Any], requested: str) -> str:
@@ -265,18 +295,20 @@ def extract_pack_qty(text: str) -> tuple[int | None, str]:
     except (TypeError, ValueError):
         return None, text
     cleaned = f"{text[:match.start()]} {text[match.end():]}"
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;")
+    cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = re.sub(r"\(\s*\)", " ", cleaned)
     cleaned = re.sub(r"\s+[()]\s*", " ", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;()")
-    return qty, cleaned
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = trim_scheme_edges(cleaned).strip("()")
+    return qty, trim_scheme_edges(cleaned)
 
 
 def clean_scheme_text(value: Any) -> str:
     text = str(value or "")
     text = _PAREN_BLOCK_RE.sub(" ", text)
     text = re.sub(r"[()]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip(" ,.;")
+    text = re.sub(r"\s+", " ", text)
+    text = trim_scheme_edges(text)
     # «эсциталопрам 10» без единицы оставляет хвост «10» после времени приёма
     text = re.sub(
         r"(?i)(\b(?:утром|вечером|днём|днем|ночь|сном|еды|потребности|день))\s+\d+$",
@@ -288,7 +320,8 @@ def clean_scheme_text(value: Any) -> str:
 
 def strip_parentheticals(text: str) -> str:
     cleaned = _PAREN_BLOCK_RE.sub(" ", text or "")
-    return re.sub(r"\s+", " ", cleaned).strip(" ,.;")
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return trim_scheme_edges(cleaned)
 
 
 def find_drug_in_line(line: str, index: list[_NameEntry]) -> tuple[_NameEntry | None, str]:
@@ -386,7 +419,7 @@ def split_head_and_scheme(line: str) -> tuple[str, str]:
         return "", ""
     split = _SCHEME_SPLIT.split(text, maxsplit=1)
     if len(split) == 2 and split[1].strip():
-        return split[0].strip(" ,.;"), split[1].strip(" ,.;")
+        return trim_scheme_edges(split[0]), trim_scheme_edges(split[1])
     return text, ""
 
 

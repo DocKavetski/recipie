@@ -196,7 +196,7 @@ class TestDiaryToPrintWorkflow:
         assert parsed["ok"] is True
         assert parsed["drugs"][0]["mnn"] == "Escitalopram"
         assert parsed["drugs"][0]["dosage"] == "10 мг"
-        assert parsed["drugs"][0]["selectedScheme"] == "по 1 утром"
+        assert parsed["drugs"][0]["selectedScheme"] == "по 1 таблетке утром"
 
 
 class TestHistoryAndTemplates:
