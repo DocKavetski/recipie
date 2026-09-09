@@ -2297,7 +2297,7 @@ function splitTreatmentLinesLocal(text) {
     for (const block of String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")) {
         const parts = block.split(/\s*;\s*/).map((part) => part.trim()).filter(Boolean);
         for (const chunk of parts.length ? parts : []) {
-            const line = chunk.replace(bullet, "").replace(/^[\s.]+|[\s.]+$/g, "");
+            const line = chunk.replace(bullet, "").trim();
             if (!line || skip.test(normalizeTreatmentMatchText(line))) {
                 continue;
             }
@@ -2318,14 +2318,21 @@ function extractTreatmentFormLocal(line) {
         [/\bsir(?:up)?\.?\b/i, "Sir."],
         [/\bсироп(?:а|е|у)?\b/i, "Sir."],
     ];
+    const intakeBefore = /(?:\bпо\s+[\d½⅓⅔¼¾]+(?:[.,]\d+)?(?:\s*\/\s*[\d½⅓⅔¼¾]+)?|\bпо\s+\d+\s*\/\s*\d+|[\d½⅓⅔¼¾]+(?:[.,]\d+)?(?:\s*\/\s*[\d½⅓⅔¼¾]+)?|\d+\s*\/\s*\d+)\s*$/i;
     for (const [pattern, form] of patterns) {
         const match = line.match(pattern);
-        if (!match) {
+        if (!match || match.index == null) {
+            continue;
+        }
+        const before = line.slice(0, match.index);
+        // «по 1 таб.» — схема приёма, не форма выпуска
+        if (intakeBefore.test(before)) {
             continue;
         }
         const cleaned = `${line.slice(0, match.index)} ${line.slice(match.index + match[0].length)}`
             .replace(/\s+/g, " ")
-            .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+            .replace(/^[,;\s]+|[,;\s]+$/g, "")
+            .trim();
         return { form, line: cleaned };
     }
     return { form: "", line };
@@ -2341,7 +2348,9 @@ function extractTreatmentPackQtyLocal(line) {
         .replace(/\(\s*\)/g, " ")
         .replace(/\s+[()]\s*/g, " ")
         .replace(/\s+/g, " ")
-        .replace(/^[,.;()\s]+|[,.;()\s]+$/g, "");
+        .replace(/^[,;\s()]+|[,;\s()]+$/g, "")
+        .replace(/^[,;\s]+|[,;\s]+$/g, "")
+        .trim();
     return { qty: Number.isFinite(qty) ? qty : null, line: cleaned };
 }
 
@@ -2350,7 +2359,8 @@ function cleanTreatmentSchemeLocal(value) {
         .replace(/\([^)]*\)/g, " ")
         .replace(/[()]/g, " ")
         .replace(/\s+/g, " ")
-        .replace(/^[,.;\s]+|[,.;\s]+$/g, "")
+        .replace(/^[,;\s]+|[,;\s]+$/g, "")
+        .trim()
         .replace(/(\b(?:утром|вечером|днём|днем|ночь|сном|еды|потребности|день))\s+\d+$/i, "$1");
 }
 
@@ -2358,7 +2368,8 @@ function stripTreatmentParentheticalsLocal(line) {
     return String(line || "")
         .replace(/\([^)]*\)/g, " ")
         .replace(/\s+/g, " ")
-        .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+        .replace(/^[,;\s]+|[,;\s]+$/g, "")
+        .trim();
 }
 
 function extractTreatmentDoseLocal(line) {
@@ -2370,29 +2381,56 @@ function extractTreatmentDoseLocal(line) {
     const from = match.index + (match[1] ? match[1].length : 0);
     const cleaned = `${line.slice(0, from)} ${line.slice(match.index + match[0].length)}`
         .replace(/\s+/g, " ")
-        .replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+        .replace(/^[,;\s]+|[,;\s]+$/g, "")
+        .trim();
     return { dosage, line: cleaned };
 }
 
 function splitTreatmentHeadAndScheme(line) {
-    const parts = String(line || "").split(/\s*[—–−]\s*|\s+[-:]\s+/);
-    if (parts.length >= 2 && parts[1].trim()) {
+    const text = String(line || "");
+    const rangeChars = "0123456789½⅓⅔¼¾/";
+    // Ищем разделитель вручную: без lookbehind (старый Chromium в Eel).
+    const longDash = /[—–−]/g;
+    let match = longDash.exec(text);
+    while (match) {
+        const idx = match.index;
+        let left = idx - 1;
+        while (left >= 0 && /\s/.test(text[left])) {
+            left -= 1;
+        }
+        let right = idx + 1;
+        while (right < text.length && /\s/.test(text[right])) {
+            right += 1;
+        }
+        const leftIsRange = left >= 0 && rangeChars.includes(text[left]);
+        const rightIsRange = right < text.length && rangeChars.includes(text[right]);
+        if (!(leftIsRange && rightIsRange)) {
+            const head = text.slice(0, idx).replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+            const scheme = text.slice(idx + 1).replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+            if (scheme) {
+                return { head, scheme };
+            }
+        }
+        match = longDash.exec(text);
+    }
+    const spaced = text.split(/\s+[-:]\s+/);
+    if (spaced.length >= 2 && spaced[1].trim()) {
         return {
-            head: parts[0].replace(/^[,.;\s]+|[,.;\s]+$/g, ""),
-            scheme: parts.slice(1).join(" — ").replace(/^[,.;\s]+|[,.;\s]+$/g, ""),
+            head: spaced[0].replace(/^[,;\s]+|[,;\s]+$/g, "").trim(),
+            scheme: spaced.slice(1).join(" — ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim(),
         };
     }
-    return { head: String(line || "").trim(), scheme: "" };
+    return { head: text.trim(), scheme: "" };
 }
 
 function extractTreatmentSchemeLocal(line) {
-    const text = String(line || "").replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+    const text = String(line || "").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (!text) {
         return "";
     }
     const hint = text.match(/\b(?:по\s+\d|утром|вечером|ноч[ьюи]|днём|днем|раза?\s+в\s+день|р\/?д|через\s+день|по\s+потребности|на\s+ночь|перед\s+сном|после\s+еды|до\s+еды|1\/2|½|1[,.]5\s*т|табл|\d+\s*т\b)/i);
     if (hint) {
-        return text.slice(hint.index).replace(/^[,.;\s]+|[,.;\s]+$/g, "");
+        return text.slice(hint.index).replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     }
     return text;
 }

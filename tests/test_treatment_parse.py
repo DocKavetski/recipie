@@ -248,3 +248,27 @@ def test_ketilept_dosage_picks_matching_pack(tmp_path: Path):
     assert high["packaging"] == "N60"
     assert low["dosage"] == "25 мг"
     assert low["packaging"] == "N30"
+
+
+def test_scheme_keeps_tab_abbreviation_without_dash(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    cases = [
+        ("Эсциталопрам 10 мг по 1 таб. утром", "по 1 таб. утром"),
+        ("Флуоксетин 20 мг по 1 капс. утром", "по 1 капс. утром"),
+        ("Эсциталопрам 10 мг по 1 таблетке утром", "по 1 таблетке утром"),
+        ("Прегабалин 75 мг — по 1 капс. 2 раза/сут.", "по 1 капс. 2 раза/сут."),
+    ]
+    for text, expected in cases:
+        result = parse_treatment_text(text, catalog)
+        assert result["ok"] is True, text
+        assert result["drugs"][0]["selectedScheme"] == expected, text
+
+
+def test_scheme_keeps_dose_range_dash(tmp_path: Path):
+    from backend.treatment_parse import clean_scheme_text, split_head_and_scheme
+
+    head, scheme = split_head_and_scheme("Сертралин 50 мг — 1/4–1/2 таб. на ночь")
+    assert "Сертралин" in head
+    assert scheme == "1/4–1/2 таб. на ночь"
+    assert clean_scheme_text("по 1 таб.") == "по 1 таб."
+    assert clean_scheme_text("2 раза/сут.") == "2 раза/сут."
