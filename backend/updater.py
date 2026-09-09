@@ -10,11 +10,12 @@ import subprocess
 import sys
 import tempfile
 import zipfile
-import ssl
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+from backend.paths import app_root as _paths_app_root
+from backend.ssl_util import is_ssl_verify_error, ssl_context, ssl_unverified_context
 from backend.version import (
     APP_VERSION,
     GITHUB_BRANCH,
@@ -57,9 +58,7 @@ OVERLAY_FILES = ("VERSION", "README.md")
 
 def app_root() -> Path:
     """Каталог установки: рядом с exe (frozen) или корень репозитория."""
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parents[1]
+    return _paths_app_root()
 
 
 ROOT = app_root()
@@ -110,11 +109,11 @@ def _http_json(url: str, timeout: int = 20) -> Any:
         },
     )
     try:
-        with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
+        with urlopen(request, timeout=timeout, context=ssl_context()) as response:
             return json.loads(response.read().decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
-        if _is_ssl_verify_error(exc):
-            with urlopen(request, timeout=timeout, context=_ssl_unverified_context()) as response:
+        if is_ssl_verify_error(exc):
+            with urlopen(request, timeout=timeout, context=ssl_unverified_context()) as response:
                 return json.loads(response.read().decode("utf-8"))
         raise
 
@@ -122,57 +121,13 @@ def _http_json(url: str, timeout: int = 20) -> Any:
 def _http_bytes(url: str, timeout: int = 60) -> bytes:
     request = Request(url, headers={"User-Agent": "RecipieUpdater/1.1"})
     try:
-        with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
+        with urlopen(request, timeout=timeout, context=ssl_context()) as response:
             return response.read()
     except Exception as exc:  # noqa: BLE001
-        if _is_ssl_verify_error(exc):
-            with urlopen(request, timeout=timeout, context=_ssl_unverified_context()) as response:
+        if is_ssl_verify_error(exc):
+            with urlopen(request, timeout=timeout, context=ssl_unverified_context()) as response:
                 return response.read()
         raise
-
-
-def _is_ssl_verify_error(exc: BaseException) -> bool:
-    messages = [str(exc)]
-    current: BaseException | None = exc
-    seen = 0
-    while current is not None and seen < 5:
-        messages.append(str(current))
-        current = current.__cause__ or current.__context__
-        seen += 1
-    blob = " ".join(messages).lower()
-    return (
-        isinstance(exc, ssl.SSLError)
-        or "certificate verify failed" in blob
-        or "local issuer certificate" in blob
-        or "unable to get local issuer certificate" in blob
-        or "ssl: certificate_verify_failed" in blob
-    )
-
-
-def _ssl_context() -> ssl.SSLContext | None:
-    """
-    Возвращает SSLContext с корректными CA.
-
-    На некоторых окружениях сломаны/отсутствуют системные сертификаты, и тогда
-    urlopen падает с "CERTIFICATE_VERIFY_FAILED".
-    """
-    try:
-        import certifi  # type: ignore
-
-        ctx = ssl.create_default_context(cafile=certifi.where())
-        return ctx
-    except Exception:
-        # Если certifi недоступен — полагаемся на системный дефолт.
-        return None
-
-
-def _ssl_unverified_context() -> ssl.SSLContext:
-    """Не проверяет сертификаты. Использовать только как fallback для апдейтора."""
-    try:
-        return ssl._create_unverified_context()  # type: ignore[attr-defined]
-    except Exception:
-        # В крайнем случае всё равно вернём create_default_context
-        return ssl.create_default_context()
 
 
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -192,7 +147,9 @@ def is_git_checkout() -> bool:
 
 
 def is_frozen() -> bool:
-    return bool(getattr(sys, "frozen", False))
+    from backend.paths import is_frozen as _paths_is_frozen
+
+    return _paths_is_frozen()
 
 
 def read_local_version() -> str:
@@ -399,7 +356,7 @@ def _is_access_error(exc: BaseException) -> bool:
 def _friendly_update_error(exc: Exception) -> str:
     text = str(exc)
     lowered = text.lower()
-    if _is_ssl_verify_error(exc) or "certificate" in lowered:
+    if is_ssl_verify_error(exc) or "certificate" in lowered:
         return (
             "Не удалось проверить обновления из‑за SSL/сертификатов. "
             f"Скачайте вручную: {GITHUB_URL}/releases/latest "

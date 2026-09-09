@@ -43,98 +43,88 @@ class DrugRepository:
 
     def initialize(self) -> None:
         with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS drugs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    category TEXT NOT NULL,
-                    mnn TEXT NOT NULL UNIQUE,
-                    russian_name TEXT NOT NULL,
-                    latin_name TEXT NOT NULL,
-                    drug_form TEXT NOT NULL,
-                    dosage TEXT NOT NULL,
-                    packaging TEXT NOT NULL,
-                    trade_names_json TEXT NOT NULL,
-                    search_aliases_json TEXT NOT NULL,
-                    scheme_options_json TEXT NOT NULL,
-                    trade_details_json TEXT NOT NULL DEFAULT '{}',
-                    is_custom INTEGER NOT NULL DEFAULT 0
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    card_number TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    payload_json TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS templates (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    payload_json TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS custom_drug_schemes (
-                    mnn TEXT PRIMARY KEY,
-                    scheme_options_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS app_meta (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            connection.commit()
-
-            columns = {
-                row["name"]
-                for row in connection.execute("PRAGMA table_info(drugs)").fetchall()
-            }
-            if "trade_details_json" not in columns:
-                connection.execute(
-                    "ALTER TABLE drugs ADD COLUMN trade_details_json TEXT NOT NULL DEFAULT '{}'"
-                )
-            if "form_options_json" not in columns:
-                connection.execute(
-                    "ALTER TABLE drugs ADD COLUMN form_options_json TEXT NOT NULL DEFAULT '[]'"
-                )
-            if "dosage_options_json" not in columns:
-                connection.execute(
-                    "ALTER TABLE drugs ADD COLUMN dosage_options_json TEXT NOT NULL DEFAULT '[]'"
-                )
-            if "form_dosage_map_json" not in columns:
-                connection.execute(
-                    "ALTER TABLE drugs ADD COLUMN form_dosage_map_json TEXT NOT NULL DEFAULT '{}'"
-                )
-            if "is_custom" not in columns:
-                connection.execute(
-                    "ALTER TABLE drugs ADD COLUMN is_custom INTEGER NOT NULL DEFAULT 0"
-                )
-            if "clinical_ref_json" not in columns:
-                connection.execute(
-                    "ALTER TABLE drugs ADD COLUMN clinical_ref_json TEXT NOT NULL DEFAULT '{}'"
-                )
-            connection.commit()
-
+            self._ensure_schema(connection)
         self._reset_custom_schemes_once()
         self.sync_seed_catalog(replace=True)
         self._ensure_runtime_exposes()
+
+    @staticmethod
+    def _ensure_schema(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS drugs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                mnn TEXT NOT NULL UNIQUE,
+                russian_name TEXT NOT NULL,
+                latin_name TEXT NOT NULL,
+                drug_form TEXT NOT NULL,
+                dosage TEXT NOT NULL,
+                packaging TEXT NOT NULL,
+                trade_names_json TEXT NOT NULL,
+                search_aliases_json TEXT NOT NULL,
+                scheme_options_json TEXT NOT NULL,
+                trade_details_json TEXT NOT NULL DEFAULT '{}',
+                is_custom INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                card_number TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS custom_drug_schemes (
+                mnn TEXT PRIMARY KEY,
+                scheme_options_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        connection.commit()
+
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(drugs)").fetchall()
+        }
+        migrations = (
+            ("trade_details_json", "ALTER TABLE drugs ADD COLUMN trade_details_json TEXT NOT NULL DEFAULT '{}'"),
+            ("form_options_json", "ALTER TABLE drugs ADD COLUMN form_options_json TEXT NOT NULL DEFAULT '[]'"),
+            ("dosage_options_json", "ALTER TABLE drugs ADD COLUMN dosage_options_json TEXT NOT NULL DEFAULT '[]'"),
+            ("form_dosage_map_json", "ALTER TABLE drugs ADD COLUMN form_dosage_map_json TEXT NOT NULL DEFAULT '{}'"),
+            ("is_custom", "ALTER TABLE drugs ADD COLUMN is_custom INTEGER NOT NULL DEFAULT 0"),
+            ("clinical_ref_json", "ALTER TABLE drugs ADD COLUMN clinical_ref_json TEXT NOT NULL DEFAULT '{}'"),
+        )
+        for column, sql in migrations:
+            if column not in columns:
+                connection.execute(sql)
+        connection.commit()
 
     def _reset_custom_schemes_once(self) -> None:
         """Однократно сбрасывает пользовательские схемы после обновления каталога схем."""

@@ -526,6 +526,11 @@ def _default_schemes(item: dict[str, Any]) -> list[str]:
     return _category_fallback_schemes(item.get("category", ""), unit)[:_MAX_SCHEMES]
 
 
+def default_schemes(item: dict[str, Any]) -> list[str]:
+    """Публичный алиас для custom_drug_add и внешних вызовов."""
+    return _default_schemes(item)
+
+
 # Справка для вкладки «Схемы»: макс. суточная доза и режим отмены.
 # discontinuation: taper | abrupt | optional
 _CLINICAL_REF_BY_MNN: dict[str, dict[str, str]] = {
@@ -714,17 +719,13 @@ def normalize_seed_item(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def load_seed_drugs(path: Path | None = None) -> list[dict[str, Any]]:
-    import sys
+    from backend.paths import data_search_roots
 
     candidates: list[Path] = []
     if path is not None:
         candidates.append(Path(path))
-    root = Path(__file__).resolve().parents[1]
-    candidates.append(root / "data" / "seed_drugs_from_protocols.json")
-    if getattr(sys, "frozen", False):
-        meipass = Path(getattr(sys, "_MEIPASS", root))
-        candidates.append(meipass / "data" / "seed_drugs_from_protocols.json")
-        candidates.append(Path(sys.executable).resolve().parent / "data" / "seed_drugs_from_protocols.json")
+    for root in data_search_roots():
+        candidates.append(root / "seed_drugs_from_protocols.json")
 
     seed_path = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
     raw = json.loads(seed_path.read_text(encoding="utf-8"))
@@ -743,17 +744,13 @@ def load_seed_drugs(path: Path | None = None) -> list[dict[str, Any]]:
 
 
 def _archived_seed_candidates(path: Path | None = None) -> list[Path]:
-    import sys
+    from backend.paths import data_search_roots
 
     candidates: list[Path] = []
     if path is not None:
         candidates.append(Path(path))
-    root = Path(__file__).resolve().parents[1]
-    candidates.append(root / "data" / "archived_drugs.json")
-    if getattr(sys, "frozen", False):
-        meipass = Path(getattr(sys, "_MEIPASS", root))
-        candidates.append(meipass / "data" / "archived_drugs.json")
-        candidates.append(Path(sys.executable).resolve().parent / "data" / "archived_drugs.json")
+    for root in data_search_roots():
+        candidates.append(root / "archived_drugs.json")
     return candidates
 
 
