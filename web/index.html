@@ -230,7 +230,7 @@
                     <div class="panel-head">
                         <div>
                             <div class="panel-title mb-0">Редактирование схем лечения</div>
-                            <div class="stub-note">Каждая схема с новой строки. Сохранение только здесь (кнопка «Сохранить») — ввод в рецепте список каталога не меняет. Столбец «Справка» — макс. суточная доза и нужна ли плавная отмена. Не стирается при обновлении приложения.</div>
+                            <div class="stub-note">Схемы по группам: поддержка, начало, отмена (каждая с новой строки). Сохранение только здесь — ввод в рецепте каталог не меняет. Справка — макс. суточная доза и тип отмены.</div>
                         </div>
                     </div>
                     <div class="row g-2 align-items-end mb-3">
@@ -251,7 +251,7 @@
                                 <tr>
                                     <th style="min-width: 220px;">Препарат</th>
                                     <th style="min-width: 150px;">Категория</th>
-                                    <th style="min-width: 340px;">Схемы лечения</th>
+                                    <th style="min-width: 420px;">Схемы (поддержка / начало / отмена)</th>
                                     <th style="min-width: 180px;">Справка</th>
                                     <th style="min-width: 120px;">Статус</th>
                                     <th style="min-width: 160px;"></th>
@@ -470,11 +470,14 @@
                 </div>
             </td>
             <td>
+                <select class="form-select form-select-sm drug-scheme-select mb-1" title="Группы схем">
+                    <option value="">Схема…</option>
+                </select>
                 <input
                     class="form-control form-control-sm drug-scheme-input"
                     type="text"
                     list=""
-                    placeholder="Введите схему или выберите"
+                    placeholder="Или введите схему"
                     autocomplete="off"
                 >
                 <datalist class="drug-scheme-datalist"></datalist>
@@ -509,7 +512,7 @@
     <script src="js/dispense-qty.js"></script>
     <script src="js/trade-packaging.js"></script>
     <script src="js/template-editor.js"></script>
-    <script src="js/scheme-editor.js"></script>
     <script src="js/main.js"></script>
+    <script src="js/scheme-editor.js"></script>
 </body>
 </html>
