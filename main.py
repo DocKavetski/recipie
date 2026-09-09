@@ -23,6 +23,7 @@ from backend.db import DrugRepository
 from backend.defaults import DEFAULT_DOCTOR_NAME, DEFAULT_STAMP, DEFAULT_UNP
 from backend.doctor_change import change_doctor as change_doctor_service
 from backend.doctor_change import clear_patient_data as clear_patient_data_service
+from backend.paths import resource_path, writable_path
 from backend.pdf_gen import generate_prescription_pdf
 from backend.print_preview import build_preview_context
 from backend.runtime_control import build_restart_command, hard_exit, spawn_restart
@@ -34,20 +35,6 @@ from backend.updater import apply_update, cleanup_update_artifacts, get_update_s
 from backend.validate import normalize_prescription_payload, validate_prescription_payload
 from backend.version import APP_VERSION, GITHUB_URL
 from backend.printer import open_pdf
-
-
-def resource_path(*parts: str) -> Path:
-    if getattr(sys, "frozen", False):
-        external = Path(sys.executable).resolve().parent.joinpath(*parts)
-        if external.exists():
-            return external
-    base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-    return base_path.joinpath(*parts)
-
-
-def writable_path(*parts: str) -> Path:
-    base_path = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-    return base_path.joinpath(*parts)
 
 
 REPOSITORY = DrugRepository(writable_path("data") / "app.db")

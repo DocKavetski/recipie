@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
-from backend.tabletka import _session, availability_to_dict, check_availability_minsk
+from backend.tabletka import availability_to_dict, check_availability_minsk, make_session
 
 LOGGER = logging.getLogger(__name__)
 
@@ -162,7 +162,7 @@ def build_daily_cache(
     session = None
     wrapped = checker
     if checker is check_availability_minsk:
-        session = _session()
+        session = make_session()
 
         def wrapped(query, aliases=None):  # noqa: ANN001
             return check_availability_minsk(

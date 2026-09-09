@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from backend.seed_loader import _default_schemes
+from backend.seed_loader import default_schemes
 from backend.tabletka_enrich import enrich_by_russian_name, enrichment_to_seed_fields
 from backend.trade_packaging import trade_details_from_variants
 
@@ -92,7 +92,7 @@ def payload_from_tabletka_query(query: str, *, enricher=None) -> dict[str, Any]:
             "message": enrichment.message,
         },
     }
-    payload["scheme_options"] = _default_schemes(payload)
+    payload["scheme_options"] = default_schemes(payload)
     return payload
 
 

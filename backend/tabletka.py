@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-import ssl
 import time
 from dataclasses import dataclass
 from typing import Any, Iterable
@@ -13,6 +12,8 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 from urllib3.exceptions import InsecureRequestWarning
+
+from backend.ssl_util import certifi_bundle, is_ssl_verify_error
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,41 +51,26 @@ class MinskAvailability:
 
 
 def _is_ssl_error(exc: BaseException) -> bool:
-    messages = [str(exc)]
-    current: BaseException | None = exc
-    for _ in range(5):
-        if current is None:
-            break
-        messages.append(str(current))
-        current = current.__cause__ or current.__context__
-    blob = " ".join(messages).lower()
-    return (
-        isinstance(exc, ssl.SSLError)
-        or "certificate verify failed" in blob
-        or "local issuer certificate" in blob
-        or "unable to get local issuer certificate" in blob
-        or "ssl: certificate_verify_failed" in blob
-        or "sslerror" in blob
-    )
+    return is_ssl_verify_error(exc)
 
 
 def _certifi_bundle() -> str | None:
-    try:
-        import certifi
-
-        return certifi.where()
-    except Exception:
-        return None
+    return certifi_bundle()
 
 
 def _session() -> requests.Session:
     """Сессия с CA из certifi — в portable Windows системные сертификаты часто пустые."""
     session = requests.Session()
     session.headers.update(HEADERS)
-    bundle = _certifi_bundle()
+    bundle = certifi_bundle()
     if bundle:
         session.verify = bundle
     return session
+
+
+def make_session() -> requests.Session:
+    """Публичный алиас для availability_cache и тестов."""
+    return _session()
 
 
 def _disable_verify(session: requests.Session) -> None:

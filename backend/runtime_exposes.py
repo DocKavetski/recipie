@@ -2,6 +2,9 @@
 
 Вызывается из DrugRepository.initialize(), чтобы portable-обновление
 backend/ рядом с exe регистрировало новые методы даже со старым main.py внутри сборки.
+
+Новые @eel.expose лучше добавлять и сюда, и в main.py (дублирование намеренное:
+frozen overlay подхватывает runtime_exposes, исходный запуск — main.py).
 """
 
 from __future__ import annotations
