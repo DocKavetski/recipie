@@ -272,3 +272,20 @@ def test_scheme_keeps_dose_range_dash(tmp_path: Path):
     assert scheme == "1/4–1/2 таб. на ночь"
     assert clean_scheme_text("по 1 таб.") == "по 1 таб."
     assert clean_scheme_text("2 раза/сут.") == "2 раза/сут."
+
+
+def test_scheme_keeps_po_with_fractions(tmp_path: Path):
+    catalog = _catalog(tmp_path)
+    cases = [
+        ("Эсциталопрам 10 мг по 1/4 таб. утром", "по 1/4 таб. утром"),
+        ("Эсциталопрам 10 мг по1/4т утром", "по1/4т утром"),
+        ("Эсциталопрам 10 мг по1/4 таб. утром", "по1/4 таб. утром"),
+        ("Эсциталопрам 10 мг по ¼ таб. утром", "по ¼ таб. утром"),
+        ("Эсциталопрам 10 мг 1/4 таб. утром", "1/4 таб. утром"),
+        ("Сертралин 100 мг по1/4–1/2 таб. на ночь", "по1/4–1/2 таб. на ночь"),
+        ("Сертралин 50 мг по 1/4–1/2 таб. на ночь", "по 1/4–1/2 таб. на ночь"),
+    ]
+    for text, expected in cases:
+        result = parse_treatment_text(text, catalog)
+        assert result["ok"] is True, text
+        assert result["drugs"][0]["selectedScheme"] == expected, text
